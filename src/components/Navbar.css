@@ -1,0 +1,275 @@
+/* Navbar Styles */
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0px;
+    background-color: #0f172a;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    padding-top: 70px; /* Add space for fixed navbar */
+}
+
+.nav {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    backdrop-filter: blur(20px);
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 2rem;
+    padding: 0 2rem;
+    height: 70px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    z-index: 1000;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.site-name {
+    font-size: 2rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #60a5fa, #a78bfa, #ec4899);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    transition: all 0.3s ease;
+    letter-spacing: -0.5px;
+    position: absolute;
+    left: 2rem;
+}
+
+.site-name:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.2);
+}
+
+.nav-menu {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.nav-item {
+    position: relative;
+    border-radius: 12px;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+}
+
+.nav-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(96, 165, 250, 0.1), rgba(167, 139, 250, 0.1));
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    border-radius: 12px;
+}
+
+.nav-item:hover::before {
+    opacity: 1;
+}
+
+.nav-link {
+    color: #e2e8f0;
+    text-decoration: none;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1.25rem;
+    font-weight: 500;
+    font-size: 0.95rem;
+    position: relative;
+    z-index: 1;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 12px;
+}
+
+.nav-item:hover .nav-link {
+    color: #ffffff;
+    transform: translateY(-1px);
+}
+
+.nav-item.active {
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+    transform: scale(1.05);
+}
+
+.nav-item.active::before {
+    display: none;
+}
+
+.nav-item.active .nav-link {
+    color: white;
+    font-weight: 600;
+}
+
+.nav-item.active:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+}
+
+/* Hover effect for non-active items */
+.nav-item:not(.active):hover {
+    background: rgba(148, 163, 184, 0.1);
+    transform: translateY(-1px);
+}
+
+/* Active state indicator */
+.nav-item.active::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 6px;
+    height: 6px;
+    background: #60a5fa;
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(96, 165, 250, 0.8);
+}
+
+/* Authentication Buttons - Consistent Green Styling */
+.nav-auth {
+    display: flex;
+    gap: 1rem;
+    justify-self: end;
+    margin-right: 1rem;
+    position: absolute;
+    right: 2rem;
+}
+
+.auth-btn {
+    padding: 0.6rem 1.2rem;
+    border-radius: 25px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.3s ease;
+    font-size: 0.9rem;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Login Button - Green Theme */
+.login-btn {
+    color: #30A755 !important;
+    background: transparent !important;
+    border: 2px solid #30A755 !important;
+}
+
+.login-btn:hover {
+    background: transparent !important;
+    color: #30A755 !important;
+    border-color: #30A755 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(48, 167, 85, 0.2);
+    opacity: 0.8;
+}
+
+.login-btn.active {
+    background: transparent !important;
+    color: #30A755 !important;
+    border-color: #30A755 !important;
+    font-weight: 700;
+    box-shadow: 0 0 8px rgba(48, 167, 85, 0.3);
+}
+
+/* Sign Up Button */
+.signup-btn {
+    background: #3b82f6 !important;
+    color: white !important;
+    border: 2px solid #3b82f6 !important;
+}
+
+.signup-btn:hover {
+    background: #2563eb !important;
+    border-color: #2563eb !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.signup-btn.active {
+    background: #2563eb !important;
+    border-color: #2563eb !important;
+    font-weight: 700;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .nav {
+        padding: 0 1rem;
+        height: 60px;
+    }
+    
+    .site-name {
+        font-size: 1.5rem;
+        position: relative;
+        left: 0;
+    }
+    
+    .nav-menu {
+        gap: 0.25rem;
+    }
+    
+    .nav-link {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.9rem;
+    }
+    
+    .nav-auth {
+        position: relative;
+        right: 0;
+        margin-right: 0;
+    }
+    
+    .auth-btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.85rem;
+    }
+}
+
+/* Smooth scrolling animation */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Global override for login button consistency across all pages */
+button.login-btn,
+.login-btn,
+a.login-btn {
+    color: #30A755 !important;
+    background: transparent !important;
+    border: 2px solid #30A755 !important;
+}
+
+button.login-btn:hover,
+.login-btn:hover,
+a.login-btn:hover {
+    background: transparent !important;
+    color: #30A755 !important;
+    border-color: #30A755 !important;
+    opacity: 0.8;
+}
