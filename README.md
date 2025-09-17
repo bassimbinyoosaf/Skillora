@@ -1,13 +1,13 @@
-# Getting Started with Create React App
-
-This project was bootstrapped with [Create React App](https://github.com/facebook/vite).
+# Getting Started with Vite
+vite 
+This project was bootstrapped with [Vite](https://github.com/facebook/vite).
 
 ## Available Scripts
 
 In the project directory, you can run:
 
 ### `npm start`
-kljHDUG
+
 Runs the app in the development mode.\
 Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
 
@@ -41,7 +41,7 @@ You don't have to ever use `eject`. The curated feature set is suitable for smal
 
 ## Learn More
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/vite/docs/getting-started).
+You can learn more in the [Vite documentation](https://facebook.github.io/vite/docs/getting-started).
 
 To learn React, check out the [React documentation](https://reactjs.org/).
 
