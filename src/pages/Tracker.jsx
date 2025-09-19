@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Upload, FileText, X, LogIn, Download, Eye, Trash2 } from 'lucide-react';
+import { Upload, FileText, X, LogIn, Download, Eye, Trash2, FileImage, Scan, Copy, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export const Tracker = () => {
@@ -13,64 +13,72 @@ export const Tracker = () => {
   const [loading, setLoading] = useState(true);
   const [fetchingFiles, setFetchingFiles] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
-  const navigate = useNavigate();
+  
+  // Document Processing States
+  const [docModalOpen, setDocModalOpen] = useState(false);
+  const [docFile, setDocFile] = useState(null);
+  const [docResult, setDocResult] = useState(null);
+  const [docLoading, setDocLoading] = useState(false);
+  const [docServiceAvailable, setDocServiceAvailable] = useState(false);
+  const [selectedFileForDoc, setSelectedFileForDoc] = useState(null);
+  const [textCopied, setTextCopied] = useState(false);
 
-  // Refs to prevent memory leaks
+  const navigate = useNavigate();
+  const isMountedRef = useRef(true);
   const authCheckIntervalRef = useRef(null);
   const progressIntervalsRef = useRef(new Map());
-  const isMountedRef = useRef(true);
 
   const loggedInYellow = '#F59E0B';
 
-  // Helper function to sanitize email for folder naming (matches server logic)
+  // Helper functions
   const sanitizeEmailForFolder = useCallback((email) => {
-    const username = email.toLowerCase().split('@')[0];
-    return username.replace(/[^a-z0-9]/g, '_');
+    return email.toLowerCase().split('@')[0].replace(/[^a-z0-9]/g, '_');
   }, []);
 
-  // File type validation - memoized to prevent recreating on every render
   const isValidFileType = useCallback((file) => {
-    const allowedTypes = [
-      'image/jpeg',
-      'image/jpg', 
-      'image/png',
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    ];
-    
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf',
+                         'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
     const allowedExtensions = ['jpg', 'jpeg', 'png', 'pdf', 'doc', 'docx'];
     const fileExtension = file.name.split('.').pop().toLowerCase();
-    
     return allowedTypes.includes(file.type) && allowedExtensions.includes(fileExtension);
   }, []);
 
-  // Optimized file fetching with abort controller and optional loading state
+  const isDocumentFile = useCallback((filename) => {
+    const docExtensions = ['jpg', 'jpeg', 'png', 'pdf', 'doc', 'docx'];
+    const fileExt = filename.split('.').pop().toLowerCase();
+    return docExtensions.includes(fileExt);
+  }, []);
+
+  // Document Service Functions
+  const checkDocServiceStatus = useCallback(async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/document/status');
+      const data = await response.json();
+      setDocServiceAvailable(data.available);
+      return data.available;
+    } catch (error) {
+      console.error('Error checking document service:', error);
+      setDocServiceAvailable(false);
+      return false;
+    }
+  }, []);
+
+  // File fetching
   const fetchUserFiles = useCallback(async (userData, showLoading = false) => {
     if (!userData || fetchingFiles) return;
     
-    if (showLoading) {
-      setFetchingFiles(true);
-    }
-    const controller = new AbortController();
+    if (showLoading) setFetchingFiles(true);
     
     try {
-      const res = await fetch(`http://localhost:5000/api/files/${encodeURIComponent(userData.email)}`, {
-        signal: controller.signal,
-        timeout: 10000 // 10 second timeout
-      });
-      
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
-      }
+      const res = await fetch(`http://localhost:5000/api/files/${encodeURIComponent(userData.email)}`);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       
       const data = await res.json();
-      
       if (isMountedRef.current) {
         setUploadedFiles(data.success ? data.files : []);
       }
     } catch (err) {
-      if (err.name !== 'AbortError' && isMountedRef.current) {
+      if (isMountedRef.current) {
         console.error('Error fetching files:', err);
         setUploadedFiles([]);
       }
@@ -79,11 +87,9 @@ export const Tracker = () => {
         setFetchingFiles(false);
       }
     }
-
-    return () => controller.abort();
   }, [fetchingFiles]);
 
-  // Optimized auth check with cleanup
+  // Auth check
   const checkAuthStatus = useCallback(() => {
     if (!isMountedRef.current) return;
     
@@ -97,7 +103,6 @@ export const Tracker = () => {
       setUser(parsedUser);
       
       if (isAuth && parsedUser) {
-        // Initial load - don't show loading spinner for seamless UX
         fetchUserFiles(parsedUser, false);
       } else if (!loading) {
         navigate('/login');
@@ -110,18 +115,17 @@ export const Tracker = () => {
         setIsAuthenticated(false);
         setUser(null);
         setLoading(false);
-        if (!loading) {
-          navigate('/login');
-        }
+        if (!loading) navigate('/login');
       }
     }
   }, [navigate, fetchUserFiles, loading]);
 
-  // Main effect with proper cleanup
+  // Main effect
   useEffect(() => {
     isMountedRef.current = true;
     
     checkAuthStatus();
+    checkDocServiceStatus();
     
     const handleAuthChange = (e) => {
       if (!isMountedRef.current) return;
@@ -132,8 +136,10 @@ export const Tracker = () => {
 
     window.addEventListener('authStateChanged', handleAuthChange);
     
-    // Reduce interval frequency to prevent excessive checking
-    authCheckIntervalRef.current = setInterval(checkAuthStatus, 5000); // Changed from 2000 to 5000
+    authCheckIntervalRef.current = setInterval(() => {
+      checkAuthStatus();
+      checkDocServiceStatus();
+    }, 10000);
 
     return () => {
       isMountedRef.current = false;
@@ -141,40 +147,40 @@ export const Tracker = () => {
       if (authCheckIntervalRef.current) {
         clearInterval(authCheckIntervalRef.current);
       }
-      // Clear all progress intervals
       progressIntervalsRef.current.forEach(interval => clearInterval(interval));
       progressIntervalsRef.current.clear();
     };
-  }, [navigate, checkAuthStatus]);
+  }, [navigate, checkAuthStatus, checkDocServiceStatus]);
 
-  // Debounced file change handler
+  // File handling
   const handleFileChange = useCallback((e) => {
     const selectedFiles = Array.from(e.target.files);
-    const validFiles = [];
-    const invalidFiles = [];
-
-    selectedFiles.forEach(file => {
-      if (isValidFileType(file)) {
-        validFiles.push(file);
-      } else {
-        invalidFiles.push(file.name);
-      }
-    });
+    const validFiles = selectedFiles.filter(file => isValidFileType(file));
+    const invalidFiles = selectedFiles.filter(file => !isValidFileType(file));
 
     if (invalidFiles.length > 0) {
-      alert(`The following files are not allowed: ${invalidFiles.join(', ')}\n\nOnly JPG, PNG, PDF, and DOC files are permitted.`);
+      alert(`Invalid files: ${invalidFiles.map(f => f.name).join(', ')}\n\nOnly JPG, PNG, PDF, and DOC files are permitted.`);
     }
 
-    // Only update files state if we have valid files
     if (validFiles.length > 0) {
       setFiles(prev => [...prev, ...validFiles]);
     }
     
-    // Reset input value to allow re-selecting the same file
     e.target.value = '';
   }, [isValidFileType]);
 
-  // Optimized drag and drop handlers
+  const handleDocFileChange = useCallback((e) => {
+    const selectedFile = e.target.files[0];
+    if (selectedFile && isValidFileType(selectedFile)) {
+      setDocFile(selectedFile);
+      setDocResult(null);
+    } else {
+      alert('Please select a valid file (JPG, PNG, PDF, DOC, DOCX) for text extraction.');
+    }
+    e.target.value = '';
+  }, [isValidFileType]);
+
+  // Drag and drop
   const handleDragOver = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -196,22 +202,13 @@ export const Tracker = () => {
     e.currentTarget.style.backgroundColor = 'transparent';
     
     const droppedFiles = Array.from(e.dataTransfer.files);
-    const validFiles = [];
-    const invalidFiles = [];
-
-    droppedFiles.forEach(file => {
-      if (isValidFileType(file)) {
-        validFiles.push(file);
-      } else {
-        invalidFiles.push(file.name);
-      }
-    });
+    const validFiles = droppedFiles.filter(file => isValidFileType(file));
+    const invalidFiles = droppedFiles.filter(file => !isValidFileType(file));
 
     if (invalidFiles.length > 0) {
-      alert(`The following files are not allowed: ${invalidFiles.join(', ')}\n\nOnly JPG, PNG, PDF, and DOC files are permitted.`);
+      alert(`Invalid files: ${invalidFiles.map(f => f.name).join(', ')}\n\nOnly JPG, PNG, PDF, and DOC files are permitted.`);
     }
 
-    // Only update files state if we have valid files
     if (validFiles.length > 0) {
       setFiles(prev => [...prev, ...validFiles]);
     }
@@ -219,7 +216,6 @@ export const Tracker = () => {
 
   const removeFile = useCallback((i) => {
     setFiles(prev => prev.filter((_, idx) => idx !== i));
-    // Clear progress for removed file
     setUploadProgress(prev => {
       const newProgress = { ...prev };
       delete newProgress[i];
@@ -227,35 +223,82 @@ export const Tracker = () => {
     });
   }, []);
 
-  // Optimized upload with better error handling
+  // Document processing
+  const performDocumentExtraction = useCallback(async (file = null, filename = null) => {
+    if (!docServiceAvailable) {
+      alert('Document processing service is not available. Please ensure the Python service is running on port 5001.');
+      return;
+    }
+
+    setDocLoading(true);
+    setDocResult(null);
+
+    try {
+      if (file) {
+        // Process uploaded file
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('http://localhost:5000/api/document/extract', {
+          method: 'POST',
+          body: formData
+        });
+
+        const result = await response.json();
+        setDocResult(result);
+      } else if (filename && user) {
+        // Process existing file
+        const response = await fetch('http://localhost:5000/api/document/extract-from-file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: user.email,
+            filename: filename
+          })
+        });
+
+        const result = await response.json();
+        setDocResult(result);
+      }
+    } catch (error) {
+      console.error('Document extraction error:', error);
+      setDocResult({
+        success: false,
+        error: 'Failed to extract text. Please try again.'
+      });
+    } finally {
+      setDocLoading(false);
+    }
+  }, [docServiceAvailable, user]);
+
+  const copyToClipboard = useCallback((text) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setTextCopied(true);
+      setTimeout(() => setTextCopied(false), 2000);
+    }).catch(err => {
+      console.error('Failed to copy text:', err);
+      alert('Failed to copy text to clipboard');
+    });
+  }, []);
+
+  // Upload function
   const handleUpload = useCallback(async () => {
     if (!files.length || !user || uploading) return;
     
-    // Double-check file validation before upload
     const validFilesToUpload = files.filter(file => isValidFileType(file));
     if (validFilesToUpload.length === 0) {
-      alert('No valid files to upload. Only JPG, PNG, PDF, and DOC files are allowed.');
+      alert('No valid files to upload.');
       return;
-    }
-    
-    if (validFilesToUpload.length !== files.length) {
-      alert('Some files were removed due to invalid format. Only valid files will be uploaded.');
-      setFiles(validFilesToUpload);
     }
     
     setUploading(true);
     setUploadProgress({});
-    
-    // Clear any existing intervals
-    progressIntervalsRef.current.forEach(interval => clearInterval(interval));
-    progressIntervalsRef.current.clear();
     
     try {
       const formData = new FormData();
       formData.append('email', user.email);
       validFilesToUpload.forEach(file => formData.append('files', file));
 
-      // Optimized progress simulation
       let progress = 0;
       const progressInterval = setInterval(() => {
         if (!isMountedRef.current) {
@@ -268,23 +311,16 @@ export const Tracker = () => {
           validFilesToUpload.reduce((acc, _, i) => ({ ...acc, [i]: Math.min(progress, 90) }), prev)
         );
         
-        if (progress >= 90) {
-          clearInterval(progressInterval);
-        }
-      }, 300); // Slightly slower progress updates
+        if (progress >= 90) clearInterval(progressInterval);
+      }, 300);
       
       progressIntervalsRef.current.set('upload', progressInterval);
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-
       const res = await fetch('http://localhost:5000/api/upload', { 
         method: 'POST', 
-        body: formData,
-        signal: controller.signal
+        body: formData
       });
       
-      clearTimeout(timeoutId);
       clearInterval(progressInterval);
       progressIntervalsRef.current.delete('upload');
       
@@ -297,32 +333,26 @@ export const Tracker = () => {
       if (!isMountedRef.current) return;
       
       if (result.success) {
-        alert(`✅ ${result.files.length} file(s) uploaded successfully to folder: ${result.userFolder}`);
+        alert(`✅ ${result.files.length} file(s) uploaded successfully!`);
         setFiles([]);
         setUploadProgress({});
-        // Only fetch user files after successful upload with loading indicator
         await fetchUserFiles(user, true);
       } else {
         alert(`❌ Upload failed: ${result.message}`);
       }
     } catch (err) {
-      if (err.name === 'AbortError') {
-        alert('❌ Upload timed out. Please try again.');
-      } else {
-        console.error('Upload error:', err);
-        alert('❌ Error uploading files. Please try again.');
-      }
+      console.error('Upload error:', err);
+      alert('❌ Error uploading files. Please try again.');
     } finally {
       if (isMountedRef.current) {
         setUploading(false);
-        // Clear all progress intervals
         progressIntervalsRef.current.forEach(interval => clearInterval(interval));
         progressIntervalsRef.current.clear();
       }
     }
   }, [files, user, uploading, fetchUserFiles, isValidFileType]);
 
-  // Memoized utility functions
+  // Utility functions
   const formatFileSize = useCallback((b) => {
     if (!b) return '0 Bytes';
     const k = 1024;
@@ -333,69 +363,48 @@ export const Tracker = () => {
 
   const formatDate = useCallback((d) =>
     new Date(d).toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric', 
-      hour: '2-digit', 
-      minute: '2-digit' 
+      year: 'numeric', month: 'short', day: 'numeric', 
+      hour: '2-digit', minute: '2-digit' 
     }), []);
 
   const deleteFile = useCallback(async (name) => {
     if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
     
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-      
       const res = await fetch(`http://localhost:5000/api/delete/${encodeURIComponent(user.email)}/${encodeURIComponent(name)}`, { 
-        method: 'DELETE',
-        signal: controller.signal
+        method: 'DELETE'
       });
       
-      clearTimeout(timeoutId);
       const result = await res.json();
       
       if (result.success) {
         alert('File deleted');
-        // Show loading when refreshing after deletion
         fetchUserFiles(user, true);
       } else {
         alert(`Delete failed: ${result.message}`);
       }
     } catch (err) {
-      if (err.name === 'AbortError') {
-        alert('Delete operation timed out. Please try again.');
-      } else {
-        console.error('Delete error:', err);
-        alert('Error deleting file');
-      }
+      console.error('Delete error:', err);
+      alert('Error deleting file');
     }
   }, [user, fetchUserFiles]);
 
-  // Add this function for deleting all files
   const deleteAllFiles = useCallback(async () => {
     if (!user || uploadedFiles.length === 0) return;
     
-    if (!confirm(`Are you sure you want to delete ALL ${uploadedFiles.length} files? This action cannot be undone.`)) return;
+    if (!confirm(`Delete ALL ${uploadedFiles.length} files? This cannot be undone.`)) return;
     
     setDeletingAll(true);
     
     try {
-      // Delete files one by one
       for (const file of uploadedFiles) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
-        
         const res = await fetch(`http://localhost:5000/api/delete/${encodeURIComponent(user.email)}/${encodeURIComponent(file.filename)}`, { 
-          method: 'DELETE',
-          signal: controller.signal
+          method: 'DELETE'
         });
         
-        clearTimeout(timeoutId);
         const result = await res.json();
-        
         if (!result.success) {
-          throw new Error(`Failed to delete ${file.filename}: ${result.message}`);
+          throw new Error(`Failed to delete ${file.filename}`);
         }
       }
       
@@ -404,14 +413,12 @@ export const Tracker = () => {
     } catch (err) {
       console.error('Error deleting all files:', err);
       alert(`Error deleting files: ${err.message}`);
-      // Refresh the file list to show current state
       fetchUserFiles(user, true);
     } finally {
       setDeletingAll(false);
     }
   }, [user, uploadedFiles, fetchUserFiles]);
 
-  // Helper function to generate file URLs
   const getFileUrl = useCallback((action, filename) => {
     return `http://localhost:5000/api/${action}/${encodeURIComponent(user.email)}/${encodeURIComponent(filename)}`;
   }, [user]);
@@ -466,13 +473,26 @@ export const Tracker = () => {
       <motion.h1 initial={{ opacity: 0, y: -30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }} style={{ fontSize: '2.5rem', fontWeight: 'bold', marginBottom: '1rem', textAlign: 'center' }}>
         Document <span style={{ color: loggedInYellow }}>Tracker</span>
       </motion.h1>
+      
       <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3, duration: 0.7 }} style={{ color: '#9CA3AF', marginBottom: '1rem', textAlign: 'center', fontSize: '1.1rem', maxWidth: '600px' }}>
-        Upload and track your academic documents, certificates, and career materials.
+        Upload and manage your documents with intelligent text extraction capabilities.
       </motion.p>
+      
       {user && (
-        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4, duration: 0.7 }} style={{ color: loggedInYellow, marginBottom: '2rem', textAlign: 'center', fontSize: '1rem', fontWeight: 500 }}>
-          📁 Files will be saved to: <strong>{sanitizeEmailForFolder(user.email)}</strong>
-        </motion.p>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4, duration: 0.7 }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '2rem' }}>
+          <p style={{ color: loggedInYellow, textAlign: 'center', fontSize: '1rem', fontWeight: 500 }}>
+            📁 Files saved to: <strong>{sanitizeEmailForFolder(user.email)}</strong>
+          </p>
+        </motion.div>
+      )}
+      
+      {/* Service Status */}
+      {!docServiceAvailable && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', padding: '1rem', marginBottom: '2rem', maxWidth: '800px', width: '100%' }}>
+          <p style={{ color: '#EF4444', textAlign: 'center', fontSize: '0.9rem' }}>
+            🔵 Document processing service unavailable. To enable text extraction, start the Python service on port 5001.
+          </p>
+        </motion.div>
       )}
       
       {/* Upload Section */}
@@ -494,7 +514,7 @@ export const Tracker = () => {
           <Upload size={48} color={loggedInYellow} style={{ marginBottom: '1rem' }} />
           <h3 style={{ color: loggedInYellow, marginBottom: '0.5rem' }}>Upload Files</h3>
           <p style={{ color: '#D1D5DB' }}>Drag & drop files here or click to browse</p>
-          <p style={{ color: '#9CA3AF', fontSize: '0.9rem', marginTop: '0.5rem' }}>Supported: JPG, PNG, PDF, DOC/DOCX only (Max 10MB, 10 files)</p>
+          <p style={{ color: '#9CA3AF', fontSize: '0.9rem', marginTop: '0.5rem' }}>Supported: JPG, PNG, PDF, DOC/DOCX (Max 10MB, 10 files)</p>
         </div>
         
         {files.length > 0 && (
@@ -580,42 +600,34 @@ export const Tracker = () => {
             {fetchingFiles ? 'Loading documents...' : 'No documents uploaded yet. Upload your first file above to get started!'}
           </p>
         ) : (
-          <div style={{ 
-            maxHeight: '400px', 
-            overflowY: 'auto',
-            scrollbarWidth: 'thin',
-            scrollbarColor: `${loggedInYellow} rgba(0,0,0,0.2)`,
-          }}>
-            {/* Custom scrollbar styling for Webkit browsers */}
-            <style>
-              {`
-                div::-webkit-scrollbar {
-                  width: 8px;
-                }
-                div::-webkit-scrollbar-track {
-                  background: rgba(0,0,0,0.2);
-                  border-radius: 4px;
-                }
-                div::-webkit-scrollbar-thumb {
-                  background: ${loggedInYellow};
-                  border-radius: 4px;
-                }
-                div::-webkit-scrollbar-thumb:hover {
-                  background: #D97706;
-                }
-              `}
-            </style>
-            
+          <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
             {uploadedFiles.map((file, i) => (
               <div key={`${file.filename}-${i}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', background: 'rgba(255,255,255,0.1)', borderRadius: '8px', marginBottom: '0.75rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
-                  <FileText size={24} color={loggedInYellow} />
+                  {file.filename.match(/\.(jpg|jpeg|png)$/i) ? (
+                    <FileImage size={24} color={loggedInYellow} />
+                  ) : (
+                    <FileText size={24} color={loggedInYellow} />
+                  )}
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: '1rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '0.25rem' }}>{file.filename}</div>
                     <div style={{ color: '#9CA3AF', fontSize: '0.85rem' }}>{formatFileSize(file.size)} • {formatDate(file.uploadDate)}</div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  {isDocumentFile(file.filename) && docServiceAvailable && (
+                    <button 
+                      onClick={() => {
+                        setSelectedFileForDoc(file.filename);
+                        performDocumentExtraction(null, file.filename);
+                        setDocModalOpen(true);
+                      }} 
+                      style={{ padding: '0.5rem', background: 'rgba(34,197,94,0.2)', border: '1px solid rgba(34,197,94,0.4)', borderRadius: '6px', color: '#22C55E', cursor: 'pointer' }}
+                      title="Extract text from document"
+                    >
+                      <Scan size={16} />
+                    </button>
+                  )}
                   <button onClick={() => handleViewFile(file.filename)} style={{ padding: '0.5rem', background: 'rgba(245,158,11,0.2)', border: '1px solid rgba(245,158,11,0.4)', borderRadius: '6px', color: loggedInYellow, cursor: 'pointer' }}>
                     <Eye size={16} />
                   </button>
@@ -631,6 +643,186 @@ export const Tracker = () => {
           </div>
         )}
       </motion.div>
+
+      {/* Document Processing Modal */}
+      {docModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '1rem'
+        }}>
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            style={{
+              background: '#1F2937',
+              borderRadius: '1rem',
+              padding: '2rem',
+              maxWidth: '600px',
+              width: '100%',
+              maxHeight: '80vh',
+              overflowY: 'auto'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3 style={{ color: loggedInYellow, margin: 0 }}>Document Text Extraction</h3>
+              <button
+                onClick={() => {
+                  setDocModalOpen(false);
+                  setDocFile(null);
+                  setDocResult(null);
+                  setSelectedFileForDoc(null);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#9CA3AF',
+                  cursor: 'pointer',
+                  padding: '0.25rem'
+                }}
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {!selectedFileForDoc && (
+              <div>
+                <div style={{
+                  border: '2px dashed rgba(245,158,11,0.4)',
+                  borderRadius: '8px',
+                  padding: '2rem',
+                  textAlign: 'center',
+                  marginBottom: '1rem',
+                  position: 'relative'
+                }}>
+                  <input
+                    type="file"
+                    onChange={handleDocFileChange}
+                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      opacity: 0,
+                      cursor: 'pointer'
+                    }}
+                  />
+                  <Scan size={48} color={loggedInYellow} style={{ marginBottom: '1rem' }} />
+                  <p style={{ color: '#D1D5DB' }}>Drop a document here or click to browse</p>
+                  <p style={{ color: '#9CA3AF', fontSize: '0.9rem' }}>Supported: PDF, DOC, DOCX, JPG, PNG</p>
+                </div>
+
+                {docFile && (
+                  <button
+                    onClick={() => performDocumentExtraction(docFile)}
+                    disabled={docLoading}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: docLoading ? '#9CA3AF' : loggedInYellow,
+                      color: '#111827',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontWeight: 600,
+                      cursor: docLoading ? 'not-allowed' : 'pointer',
+                      marginBottom: '1rem'
+                    }}
+                  >
+                    {docLoading ? 'Processing...' : 'Extract Text'}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {docLoading && (
+              <div style={{ textAlign: 'center', padding: '2rem' }}>
+                <div style={{ color: loggedInYellow, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Processing document...</div>
+                <div style={{ color: '#9CA3AF', fontSize: '0.9rem' }}>This may take a few moments</div>
+              </div>
+            )}
+
+            {docResult && (
+              <div>
+                {selectedFileForDoc && (
+                  <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'rgba(245,158,11,0.1)', borderRadius: '6px' }}>
+                    <p style={{ color: loggedInYellow, margin: 0, fontSize: '0.9rem' }}>
+                      Processing: {selectedFileForDoc}
+                    </p>
+                  </div>
+                )}
+
+                {docResult.success ? (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                      <h4 style={{ color: '#22C55E', margin: 0 }}>Extracted Text</h4>
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        {docResult.extraction_type && (
+                          <span style={{ color: '#9CA3AF', fontSize: '0.8rem' }}>
+                            Method: {docResult.extraction_type.toUpperCase()}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => copyToClipboard(docResult.text)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.25rem',
+                            padding: '0.25rem 0.5rem',
+                            background: textCopied ? 'rgba(34,197,94,0.2)' : 'rgba(245,158,11,0.2)',
+                            border: `1px solid ${textCopied ? 'rgba(34,197,94,0.4)' : 'rgba(245,158,11,0.4)'}`,
+                            borderRadius: '4px',
+                            color: textCopied ? '#22C55E' : loggedInYellow,
+                            cursor: 'pointer',
+                            fontSize: '0.8rem'
+                          }}
+                        >
+                          {textCopied ? <CheckCircle size={14} /> : <Copy size={14} />}
+                          {textCopied ? 'Copied!' : 'Copy'}
+                        </button>
+                      </div>
+                    </div>
+                    <div style={{
+                      background: '#374151',
+                      padding: '1rem',
+                      borderRadius: '6px',
+                      maxHeight: '300px',
+                      overflowY: 'auto',
+                      whiteSpace: 'pre-wrap',
+                      fontFamily: 'monospace',
+                      fontSize: '0.9rem',
+                      color: '#E5E7EB'
+                    }}>
+                      {docResult.text || 'No text found in document'}
+                    </div>
+                    <div style={{ marginTop: '0.5rem', color: '#9CA3AF', fontSize: '0.8rem' }}>
+                      {docResult.word_count && `Words: ${docResult.word_count} | `}
+                      {docResult.char_count && `Characters: ${docResult.char_count} | `}
+                      {docResult.page_count && `Pages: ${docResult.page_count} | `}
+                      {docResult.extraction_method && `Method: ${docResult.extraction_method}`}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ padding: '1rem', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px' }}>
+                    <p style={{ color: '#EF4444', margin: 0 }}>
+                      Error: {docResult.error}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };
