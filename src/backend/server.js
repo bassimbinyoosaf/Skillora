@@ -151,7 +151,7 @@ const tempUpload = multer({ storage: tempStorage, fileFilter, limits: { fileSize
 
 // ---------- DOCUMENT PROCESSING ROUTES ----------
 
-// Extract text from uploaded file
+// Extract text from uploaded file with keyword extraction
 app.post('/api/document/extract', tempUpload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -169,10 +169,11 @@ app.post('/api/document/extract', tempUpload.single('file'), async (req, res) =>
 
     const formData = new FormData();
     formData.append('file', fs.createReadStream(req.file.path));
+    formData.append('extract_keywords', 'true'); // Enable keyword extraction
 
     const response = await axios.post(`${DOC_SERVICE_URL}/document/analyze`, formData, {
       headers: formData.getHeaders(),
-      timeout: 30000
+      timeout: 60000 // Increased timeout for keyword processing
     });
 
     fs.unlinkSync(req.file.path);
@@ -196,10 +197,10 @@ app.post('/api/document/extract', tempUpload.single('file'), async (req, res) =>
   }
 });
 
-// Extract text from existing file
+// Extract text from existing file with keyword extraction
 app.post('/api/document/extract-from-file', async (req, res) => {
   try {
-    const { email, filename } = req.body;
+    const { email, filename, extract_keywords = true } = req.body;
 
     if (!email || !filename) {
       return res.status(400).json({ success: false, message: 'Email and filename required' });
@@ -224,8 +225,9 @@ app.post('/api/document/extract-from-file', async (req, res) => {
     }
 
     const response = await axios.post(`${DOC_SERVICE_URL}/document/analyze_from_path`, {
-      file_path: filePath
-    }, { timeout: 30000 });
+      file_path: filePath,
+      extract_keywords: extract_keywords
+    }, { timeout: 60000 });
 
     res.json({
       success: true,
@@ -239,6 +241,62 @@ app.post('/api/document/extract-from-file', async (req, res) => {
       success: false,
       message: 'Failed to extract text',
       error: error.response?.data?.error || error.message
+    });
+  }
+});
+
+// Extract keywords from text only
+app.post('/api/keywords/extract', async (req, res) => {
+  try {
+    const { text, min_confidence = 0.7 } = req.body;
+
+    if (!text) {
+      return res.status(400).json({ success: false, message: 'Text is required' });
+    }
+
+    const serviceAvailable = await isDocServiceAvailable();
+    if (!serviceAvailable) {
+      return res.status(503).json({
+        success: false,
+        message: 'Keyword extraction service unavailable'
+      });
+    }
+
+    const response = await axios.post(`${DOC_SERVICE_URL}/keywords/extract`, {
+      text: text,
+      min_confidence: min_confidence
+    }, { timeout: 30000 });
+
+    res.json(response.data);
+
+  } catch (error) {
+    console.error('Keyword extraction error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to extract keywords',
+      error: error.response?.data?.error || error.message
+    });
+  }
+});
+
+// Get keyword categories
+app.get('/api/keywords/categories', async (req, res) => {
+  try {
+    const serviceAvailable = await isDocServiceAvailable();
+    if (!serviceAvailable) {
+      return res.json({
+        success: true,
+        categories: ['programming_languages', 'frameworks_libraries', 'databases_tools', 'certifications', 'education', 'methodologies', 'companies']
+      });
+    }
+
+    const response = await axios.get(`${DOC_SERVICE_URL}/keywords/categories`, { timeout: 5000 });
+    res.json(response.data);
+
+  } catch (error) {
+    res.json({
+      success: true,
+      categories: ['programming_languages', 'frameworks_libraries', 'databases_tools', 'certifications', 'education', 'methodologies', 'companies']
     });
   }
 });
@@ -280,7 +338,14 @@ app.get('/api/document/status', async (req, res) => {
     res.json({
       success: true,
       available,
-      service_url: DOC_SERVICE_URL
+      service_url: DOC_SERVICE_URL,
+      features: {
+        text_extraction: available,
+        keyword_extraction: available,
+        ocr: available,
+        pdf_processing: available,
+        document_analysis: available
+      }
     });
   } catch (error) {
     res.json({
@@ -449,11 +514,19 @@ app.get('/api/download/:email/:filename', serveFile('attachment'));
 app.use('/uploads', express.static(uploadsDir));
 
 app.get('/', (_, res) => res.json({
-  message: 'Skillora Server is running!',
+  message: 'Skillora Server with Enhanced Document Processing is running!',
   status: 'healthy',
   timestamp: new Date().toISOString(),
   database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected',
-  features: { authentication: true, fileUploads: true, contactForms: true, studentProfiles: true, documentProcessing: true }
+  features: { 
+    authentication: true, 
+    fileUploads: true, 
+    contactForms: true, 
+    studentProfiles: true, 
+    documentProcessing: true,
+    keywordExtraction: true,
+    textAnalysis: true
+  }
 }));
 
 app.use('/api/auth', authRoutes);
@@ -496,11 +569,13 @@ const startServer = async () => {
     await connectDB();
     const docAvailable = await isDocServiceAvailable();
     console.log(`📄 Document Service: ${docAvailable ? 'Available' : 'Not Available'}`);
+    console.log(`🔍 Keyword Extraction: ${docAvailable ? 'Available' : 'Not Available'}`);
     
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`🌐 API: http://localhost:${PORT}/api`);
       console.log(`📄 Document Service: ${DOC_SERVICE_URL}`);
+      console.log(`💡 Features: Document Processing, Text Extraction, Keyword Analysis`);
     });
   } catch (error) {
     console.error('❌ Server start failed:', error);

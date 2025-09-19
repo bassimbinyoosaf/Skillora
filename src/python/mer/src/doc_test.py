@@ -21,6 +21,7 @@ import re
 from datetime import datetime
 import mimetypes
 from pathlib import Path
+from collections import Counter
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -36,11 +37,194 @@ pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tessera
 # pytesseract.pytesseract.tesseract_cmd = '/usr/local/bin/tesseract'
 # For Linux: Usually auto-detected
 
+class KeywordExtractor:
+    def __init__(self):
+        # Technical skills patterns
+        self.programming_languages = [
+            r'\b(?:JavaScript|TypeScript|Python|Java|C\+\+|C#|PHP|Ruby|Go|Rust|Swift|Kotlin|Scala|R|MATLAB|Perl|Dart|Elixir|Haskell)\b',
+            r'\b(?:HTML|CSS|SQL|NoSQL|GraphQL|XML|JSON|YAML)\b',
+            r'\b(?:React(?:\.js)?|Angular(?:\.js)?|Vue(?:\.js)?|Svelte|Next\.js|Nuxt\.js|Gatsby)\b',
+            r'\b(?:Node\.js|Express\.js|Django|Flask|Laravel|Spring|ASP\.NET|Rails)\b'
+        ]
+        
+        # Frameworks and libraries
+        self.frameworks_libraries = [
+            r'\b(?:TensorFlow|PyTorch|Scikit-learn|Pandas|NumPy|OpenCV|Keras|NLTK|SpaCy)\b',
+            r'\b(?:Bootstrap|Tailwind|Material-UI|Ant Design|Chakra UI|Bulma)\b',
+            r'\b(?:jQuery|Lodash|Axios|D3\.js|Three\.js|Chart\.js|Moment\.js)\b',
+            r'\b(?:Redux|MobX|Vuex|Pinia|Context API|Zustand)\b'
+        ]
+        
+        # Databases and tools
+        self.databases_tools = [
+            r'\b(?:MongoDB|MySQL|PostgreSQL|SQLite|Redis|Elasticsearch|DynamoDB|Firebase|Supabase)\b',
+            r'\b(?:Docker|Kubernetes|Jenkins|GitHub Actions|GitLab CI|Travis CI|CircleCI)\b',
+            r'\b(?:AWS|Azure|Google Cloud|GCP|Heroku|Vercel|Netlify|DigitalOcean)\b',
+            r'\b(?:Git|SVN|Mercurial|Bitbucket|GitHub|GitLab)\b'
+        ]
+        
+        # Certifications patterns
+        self.certifications = [
+            r'\b(?:AWS|Amazon Web Services)\s+(?:Certified\s+)?(?:Solutions Architect|Developer|SysOps|Cloud Practitioner|DevOps Engineer|Security|Machine Learning|Data Analytics)\b',
+            r'\b(?:Microsoft|Azure)\s+(?:Certified\s+)?(?:Azure Administrator|Azure Developer|Azure Architect|Azure DevOps|Azure Security|Azure Data|Azure AI)\b',
+            r'\b(?:Google Cloud|GCP)\s+(?:Certified\s+)?(?:Associate Cloud Engineer|Professional Cloud Architect|Professional Data Engineer|Professional Machine Learning)\b',
+            r'\b(?:Cisco)\s+(?:Certified\s+)?(?:CCNA|CCNP|CCIE|CCDA|CCDP|CCSP)\b',
+            r'\b(?:Oracle)\s+(?:Certified\s+)?(?:Associate|Professional|Master|Expert)\b',
+            r'\b(?:CompTIA)\s+(?:A\+|Network\+|Security\+|Cloud\+|Linux\+|Project\+|Server\+)\b',
+            r'\b(?:Scrum Master|Product Owner|CSM|CSPO|PSM|PSPO|SAFe|Agile)\s+(?:Certified|Certification)?\b',
+            r'\b(?:PMP|Project Management Professional|CAPM|Prince2|Six Sigma|Lean)\b',
+            r'\b(?:React|Angular|Vue|Python|Java|JavaScript|TypeScript|AWS|Azure|Docker|Kubernetes)\s+(?:Certified|Certification|Certificate)\b'
+        ]
+        
+        # Educational qualifications
+        self.education_patterns = [
+            r'\b(?:Bachelor|Master|PhD|Doctorate|Associate)\s+(?:of\s+)?(?:Science|Arts|Engineering|Technology|Computer Science|Information Technology|Business|Management)\b',
+            r'\b(?:B\.Tech|M\.Tech|B\.E\.|M\.E\.|B\.S\.|M\.S\.|B\.A\.|M\.A\.|MBA|MCA|BCA)\b',
+            r'\b(?:Computer Science|Information Technology|Software Engineering|Data Science|Machine Learning|Artificial Intelligence)\b'
+        ]
+        
+        # Soft skills and methodologies
+        self.methodologies = [
+            r'\b(?:Agile|Scrum|Kanban|DevOps|CI/CD|TDD|BDD|Microservices|RESTful|GraphQL)\b',
+            r'\b(?:Machine Learning|Deep Learning|Data Science|Big Data|Analytics|Statistics|NLP|Computer Vision)\b',
+            r'\b(?:UI/UX|User Experience|User Interface|Design Thinking|Figma|Sketch|Adobe|Photoshop)\b'
+        ]
+        
+        # Company names (for work experience)
+        self.companies = [
+            r'\b(?:Google|Microsoft|Apple|Amazon|Meta|Facebook|Netflix|Tesla|Uber|Airbnb|Spotify)\b',
+            r'\b(?:IBM|Oracle|SAP|Salesforce|Adobe|Intel|NVIDIA|Qualcomm|Cisco|VMware)\b',
+            r'\b(?:TCS|Infosys|Wipro|HCL|Cognizant|Accenture|Capgemini|Deloitte|PwC|EY)\b'
+        ]
+        
+        # Combine all patterns
+        self.all_patterns = {
+            'programming_languages': self.programming_languages,
+            'frameworks_libraries': self.frameworks_libraries,
+            'databases_tools': self.databases_tools,
+            'certifications': self.certifications,
+            'education': self.education_patterns,
+            'methodologies': self.methodologies,
+            'companies': self.companies
+        }
+
+    def extract_keywords(self, text, min_confidence=0.7):
+        """Extract keywords from text using regex patterns"""
+        if not text or not isinstance(text, str):
+            return {
+                "success": False,
+                "error": "Invalid or empty text provided"
+            }
+        
+        # Clean text for better matching
+        cleaned_text = self.clean_text_for_extraction(text)
+        
+        found_keywords = {}
+        all_matches = []
+        
+        for category, patterns in self.all_patterns.items():
+            category_matches = []
+            
+            for pattern in patterns:
+                matches = re.finditer(pattern, cleaned_text, re.IGNORECASE | re.MULTILINE)
+                for match in matches:
+                    keyword = match.group().strip()
+                    # Store match with context
+                    start = max(0, match.start() - 50)
+                    end = min(len(cleaned_text), match.end() + 50)
+                    context = cleaned_text[start:end].strip()
+                    
+                    match_info = {
+                        'keyword': keyword,
+                        'category': category,
+                        'context': context,
+                        'position': match.start(),
+                        'confidence': self.calculate_confidence(keyword, context, category)
+                    }
+                    
+                    if match_info['confidence'] >= min_confidence:
+                        category_matches.append(match_info)
+                        all_matches.append(match_info)
+            
+            if category_matches:
+                found_keywords[category] = category_matches
+        
+        # Get top keywords by frequency and confidence
+        keyword_counts = Counter([m['keyword'].lower() for m in all_matches])
+        top_keywords = self.get_top_keywords(all_matches, keyword_counts)
+        
+        return {
+            "success": True,
+            "keywords_by_category": found_keywords,
+            "top_keywords": top_keywords,
+            "total_keywords_found": len(all_matches),
+            "unique_keywords": len(set([m['keyword'].lower() for m in all_matches])),
+            "categories_found": list(found_keywords.keys())
+        }
+    
+    def clean_text_for_extraction(self, text):
+        """Clean text for better keyword extraction"""
+        # Remove excessive whitespace and normalize
+        text = re.sub(r'\s+', ' ', text)
+        # Remove special characters that might interfere with matching
+        text = re.sub(r'[^\w\s\.\+\#\-/]', ' ', text)
+        return text.strip()
+    
+    def calculate_confidence(self, keyword, context, category):
+        """Calculate confidence score for a keyword match"""
+        confidence = 0.8  # Base confidence
+        
+        # Context-based confidence adjustments
+        context_lower = context.lower()
+        keyword_lower = keyword.lower()
+        
+        # Higher confidence for certain contexts
+        if any(word in context_lower for word in ['certified', 'certification', 'certificate', 'diploma', 'degree']):
+            confidence += 0.15
+            
+        if any(word in context_lower for word in ['experience', 'skilled', 'proficient', 'expert', 'years']):
+            confidence += 0.1
+            
+        if any(word in context_lower for word in ['project', 'developed', 'built', 'created', 'implemented']):
+            confidence += 0.05
+            
+        # Category-specific adjustments
+        if category == 'certifications' and any(word in context_lower for word in ['aws', 'microsoft', 'google', 'oracle']):
+            confidence += 0.1
+            
+        return min(confidence, 1.0)
+    
+    def get_top_keywords(self, all_matches, keyword_counts, limit=10):
+        """Get top keywords sorted by frequency and confidence"""
+        # Calculate weighted scores
+        keyword_scores = {}
+        for match in all_matches:
+            keyword_lower = match['keyword'].lower()
+            frequency = keyword_counts[keyword_lower]
+            confidence = match['confidence']
+            
+            # Weighted score combining frequency and confidence
+            score = frequency * 0.6 + confidence * 0.4
+            
+            if keyword_lower not in keyword_scores or score > keyword_scores[keyword_lower]['score']:
+                keyword_scores[keyword_lower] = {
+                    'keyword': match['keyword'],
+                    'category': match['category'],
+                    'frequency': frequency,
+                    'confidence': confidence,
+                    'score': score
+                }
+        
+        # Sort by score and return top keywords
+        sorted_keywords = sorted(keyword_scores.values(), key=lambda x: x['score'], reverse=True)
+        return sorted_keywords[:limit]
+
 class DocumentProcessor:
     def __init__(self):
         self.supported_image_formats = ['.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.gif']
         self.supported_doc_formats = ['.pdf', '.doc', '.docx']
         self.max_file_size = 10 * 1024 * 1024  # 10MB
+        self.keyword_extractor = KeywordExtractor()
     
     def validate_file(self, file_path, file_type=None):
         """Validate file size and format"""
@@ -84,7 +268,7 @@ class DocumentProcessor:
             except Exception:
                 return None
     
-    def extract_text_from_image(self, image_path, lang='eng', preprocessing=True, custom_config=None):
+    def extract_text_from_image(self, image_path, lang='eng', preprocessing=True, custom_config=None, extract_keywords=True):
         """Extract text from image using pytesseract"""
         try:
             validation = self.validate_file(image_path, 'image')
@@ -115,7 +299,7 @@ class DocumentProcessor:
             
             text = extracted_text.strip()
             
-            return {
+            result = {
                 "success": True,
                 "text": text,
                 "confidence": round(avg_confidence, 2),
@@ -125,12 +309,20 @@ class DocumentProcessor:
                 "extraction_type": "ocr"
             }
             
+            # Extract keywords if requested and text is available
+            if extract_keywords and text:
+                keyword_result = self.keyword_extractor.extract_keywords(text)
+                if keyword_result["success"]:
+                    result["keywords"] = keyword_result
+            
+            return result
+            
         except Exception as e:
             logger.error(f"Error extracting text from image: {str(e)}")
             return {"success": False, "error": str(e)}
 
     # Document Processing Methods
-    def extract_text_from_pdf(self, pdf_path):
+    def extract_text_from_pdf(self, pdf_path, extract_keywords=True):
         """Extract text from PDF using multiple methods for best results"""
         try:
             validation = self.validate_file(pdf_path, 'document')
@@ -198,7 +390,7 @@ class DocumentProcessor:
             # Clean up the text
             text_content = self.clean_extracted_text(text_content)
             
-            return {
+            result = {
                 "success": True,
                 "text": text_content,
                 "word_count": len(text_content.split()) if text_content else 0,
@@ -208,11 +400,19 @@ class DocumentProcessor:
                 "extraction_type": "pdf"
             }
             
+            # Extract keywords if requested and text is available
+            if extract_keywords and text_content:
+                keyword_result = self.keyword_extractor.extract_keywords(text_content)
+                if keyword_result["success"]:
+                    result["keywords"] = keyword_result
+            
+            return result
+            
         except Exception as e:
             logger.error(f"Error extracting text from PDF: {str(e)}")
             return {"success": False, "error": str(e)}
     
-    def extract_text_from_docx(self, docx_path):
+    def extract_text_from_docx(self, docx_path, extract_keywords=True):
         """Extract text from DOCX using multiple methods"""
         try:
             validation = self.validate_file(docx_path, 'document')
@@ -256,7 +456,7 @@ class DocumentProcessor:
             # Clean up the text
             text_content = self.clean_extracted_text(text_content)
             
-            return {
+            result = {
                 "success": True,
                 "text": text_content,
                 "word_count": len(text_content.split()) if text_content else 0,
@@ -265,11 +465,19 @@ class DocumentProcessor:
                 "extraction_type": "docx"
             }
             
+            # Extract keywords if requested and text is available
+            if extract_keywords and text_content:
+                keyword_result = self.keyword_extractor.extract_keywords(text_content)
+                if keyword_result["success"]:
+                    result["keywords"] = keyword_result
+            
+            return result
+            
         except Exception as e:
             logger.error(f"Error extracting text from DOCX: {str(e)}")
             return {"success": False, "error": str(e)}
     
-    def extract_text_from_doc(self, doc_path):
+    def extract_text_from_doc(self, doc_path, extract_keywords=True):
         """Extract text from DOC (legacy Word format)"""
         try:
             validation = self.validate_file(doc_path, 'document')
@@ -281,7 +489,7 @@ class DocumentProcessor:
                 text_content = docx2txt.process(doc_path)
                 text_content = self.clean_extracted_text(text_content)
                 
-                return {
+                result = {
                     "success": True,
                     "text": text_content,
                     "word_count": len(text_content.split()) if text_content else 0,
@@ -289,6 +497,14 @@ class DocumentProcessor:
                     "extraction_method": "docx2txt",
                     "extraction_type": "doc"
                 }
+                
+                # Extract keywords if requested and text is available
+                if extract_keywords and text_content:
+                    keyword_result = self.keyword_extractor.extract_keywords(text_content)
+                    if keyword_result["success"]:
+                        result["keywords"] = keyword_result
+                
+                return result
                 
             except Exception as e:
                 return {
@@ -312,7 +528,7 @@ class DocumentProcessor:
         
         return text
     
-    def analyze_document(self, file_path):
+    def analyze_document(self, file_path, extract_keywords=True):
         """Main method to analyze any supported document type"""
         try:
             if not os.path.exists(file_path):
@@ -323,13 +539,13 @@ class DocumentProcessor:
             
             # Determine file type and extract accordingly
             if file_ext in self.supported_image_formats:
-                result = self.extract_text_from_image(file_path)
+                result = self.extract_text_from_image(file_path, extract_keywords=extract_keywords)
             elif file_ext == '.pdf':
-                result = self.extract_text_from_pdf(file_path)
+                result = self.extract_text_from_pdf(file_path, extract_keywords=extract_keywords)
             elif file_ext == '.docx':
-                result = self.extract_text_from_docx(file_path)
+                result = self.extract_text_from_docx(file_path, extract_keywords=extract_keywords)
             elif file_ext == '.doc':
-                result = self.extract_text_from_doc(file_path)
+                result = self.extract_text_from_doc(file_path, extract_keywords=extract_keywords)
             else:
                 return {"success": False, "error": f"Unsupported file format: {file_ext}"}
             
@@ -379,12 +595,13 @@ def health_check():
         
         return jsonify({
             "status": "healthy",
-            "service": "Combined Document Analysis Service",
+            "service": "Enhanced Document Analysis Service with Keyword Extraction",
             "features": {
                 "ocr": ocr_available,
                 "pdf_analysis": True,
                 "docx_analysis": True,
-                "doc_analysis": True
+                "doc_analysis": True,
+                "keyword_extraction": True
             },
             "tesseract_version": tesseract_version,
             "supported_formats": {
@@ -395,9 +612,95 @@ def health_check():
     except Exception as e:
         return jsonify({
             "status": "unhealthy",
-            "service": "Combined Document Analysis Service",
+            "service": "Enhanced Document Analysis Service",
             "error": str(e)
         }), 500
+
+# New Keyword Extraction Endpoints
+@app.route('/keywords/extract', methods=['POST'])
+def extract_keywords_only():
+    """Extract keywords from text only"""
+    try:
+        data = request.get_json()
+        
+        if not data or 'text' not in data:
+            return jsonify({"success": False, "error": "text is required"}), 400
+        
+        text = data['text']
+        min_confidence = data.get('min_confidence', 0.7)
+        
+        result = document_processor.keyword_extractor.extract_keywords(text, min_confidence)
+        return jsonify(result)
+    
+    except Exception as e:
+        logger.error(f"Error in extract_keywords_only: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/keywords/categories', methods=['GET'])
+def get_keyword_categories():
+    """Get available keyword categories"""
+    return jsonify({
+        "success": True,
+        "categories": list(document_processor.keyword_extractor.all_patterns.keys())
+    })
+
+# Enhanced Document Analysis Endpoints
+@app.route('/document/analyze', methods=['POST'])
+def analyze_uploaded_document():
+    """Analyze uploaded document (PDF, DOC, DOCX, or image) with keyword extraction"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({"success": False, "error": "No file provided"}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"success": False, "error": "No file selected"}), 400
+        
+        # Check if keyword extraction is requested
+        extract_keywords = request.form.get('extract_keywords', 'true').lower() == 'true'
+        
+        filename = secure_filename(file.filename)
+        file_ext = os.path.splitext(filename)[1] if filename else '.tmp'
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
+            try:
+                file.save(temp_file.name)
+                result = document_processor.analyze_document(temp_file.name, extract_keywords=extract_keywords)
+                if result["success"]:
+                    result["filename"] = filename
+                return jsonify(result)
+            finally:
+                try:
+                    os.unlink(temp_file.name)
+                except OSError:
+                    pass
+    
+    except Exception as e:
+        logger.error(f"Error in analyze_uploaded_document: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/document/analyze_from_path', methods=['POST'])
+def analyze_document_from_path():
+    """Analyze document from file path with keyword extraction"""
+    try:
+        data = request.get_json()
+        
+        if not data or 'file_path' not in data:
+            return jsonify({"success": False, "error": "file_path is required"}), 400
+        
+        file_path = data['file_path']
+        extract_keywords = data.get('extract_keywords', True)
+        
+        result = document_processor.analyze_document(file_path, extract_keywords=extract_keywords)
+        
+        if result["success"]:
+            result["filename"] = os.path.basename(file_path)
+        
+        return jsonify(result)
+    
+    except Exception as e:
+        logger.error(f"Error in analyze_document_from_path: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 # OCR Endpoints (maintain compatibility with existing frontend)
 @app.route('/ocr/extract', methods=['POST'])
@@ -414,13 +717,14 @@ def extract_text_from_upload():
         filename = secure_filename(file.filename)
         lang = request.form.get('language', 'eng')
         preprocessing = request.form.get('preprocessing', 'true').lower() == 'true'
+        extract_keywords = request.form.get('extract_keywords', 'true').lower() == 'true'
         
         file_ext = os.path.splitext(filename)[1] if filename else '.tmp'
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
             try:
                 file.save(temp_file.name)
                 result = document_processor.extract_text_from_image(
-                    temp_file.name, lang=lang, preprocessing=preprocessing
+                    temp_file.name, lang=lang, preprocessing=preprocessing, extract_keywords=extract_keywords
                 )
                 return jsonify(result)
             finally:
@@ -445,9 +749,10 @@ def extract_text_from_path():
         file_path = data['file_path']
         lang = data.get('language', 'eng')
         preprocessing = data.get('preprocessing', True)
+        extract_keywords = data.get('extract_keywords', True)
         
         result = document_processor.extract_text_from_image(
-            file_path, lang=lang, preprocessing=preprocessing
+            file_path, lang=lang, preprocessing=preprocessing, extract_keywords=extract_keywords
         )
         return jsonify(result)
     
@@ -473,59 +778,6 @@ def get_supported_languages():
             "languages": ["eng"],
             "default": "eng"
         })
-
-# New Document Analysis Endpoints
-@app.route('/document/analyze', methods=['POST'])
-def analyze_uploaded_document():
-    """Analyze uploaded document (PDF, DOC, DOCX, or image)"""
-    try:
-        if 'file' not in request.files:
-            return jsonify({"success": False, "error": "No file provided"}), 400
-        
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({"success": False, "error": "No file selected"}), 400
-        
-        filename = secure_filename(file.filename)
-        file_ext = os.path.splitext(filename)[1] if filename else '.tmp'
-        
-        with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
-            try:
-                file.save(temp_file.name)
-                result = document_processor.analyze_document(temp_file.name)
-                if result["success"]:
-                    result["filename"] = filename
-                return jsonify(result)
-            finally:
-                try:
-                    os.unlink(temp_file.name)
-                except OSError:
-                    pass
-    
-    except Exception as e:
-        logger.error(f"Error in analyze_uploaded_document: {str(e)}")
-        return jsonify({"success": False, "error": str(e)}), 500
-
-@app.route('/document/analyze_from_path', methods=['POST'])
-def analyze_document_from_path():
-    """Analyze document from file path"""
-    try:
-        data = request.get_json()
-        
-        if not data or 'file_path' not in data:
-            return jsonify({"success": False, "error": "file_path is required"}), 400
-        
-        file_path = data['file_path']
-        result = document_processor.analyze_document(file_path)
-        
-        if result["success"]:
-            result["filename"] = os.path.basename(file_path)
-        
-        return jsonify(result)
-    
-    except Exception as e:
-        logger.error(f"Error in analyze_document_from_path: {str(e)}")
-        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/document/supported_formats', methods=['GET'])
 def get_supported_formats():
@@ -581,10 +833,11 @@ if __name__ == '__main__':
     if missing_deps:
         logger.warning(f"Some features may not work due to missing dependencies: {', '.join(missing_deps)}")
     
-    logger.info("Starting Combined Document Analysis Service on port 5001...")
+    logger.info("Starting Enhanced Document Analysis Service with Keyword Extraction on port 5001...")
     logger.info("Available endpoints:")
     logger.info("  OCR: /ocr/extract, /ocr/extract_from_path, /ocr/languages")
     logger.info("  Document Analysis: /document/analyze, /document/analyze_from_path")
+    logger.info("  Keyword Extraction: /keywords/extract, /keywords/categories")
     logger.info("  Utilities: /health, /document/supported_formats")
     
     app.run(host='0.0.0.0', port=5001, debug=True)

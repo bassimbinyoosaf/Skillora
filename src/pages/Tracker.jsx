@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Upload, FileText, X, LogIn, Download, Eye, Trash2, FileImage, Scan, Copy, CheckCircle } from 'lucide-react';
+import { Upload, FileText, X, LogIn, Download, Eye, Trash2, FileImage, Scan, Copy, CheckCircle, Tag, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export const Tracker = () => {
@@ -22,6 +22,10 @@ export const Tracker = () => {
   const [docServiceAvailable, setDocServiceAvailable] = useState(false);
   const [selectedFileForDoc, setSelectedFileForDoc] = useState(null);
   const [textCopied, setTextCopied] = useState(false);
+
+  // Keywords States
+  const [showKeywords, setShowKeywords] = useState(false);
+  const [keywordsCopied, setKeywordsCopied] = useState(false);
 
   const navigate = useNavigate();
   const isMountedRef = useRef(true);
@@ -281,6 +285,17 @@ export const Tracker = () => {
     });
   }, []);
 
+  const copyKeywordsToClipboard = useCallback((keywords) => {
+    const keywordText = keywords.map(k => k.keyword).join(', ');
+    navigator.clipboard.writeText(keywordText).then(() => {
+      setKeywordsCopied(true);
+      setTimeout(() => setKeywordsCopied(false), 2000);
+    }).catch(err => {
+      console.error('Failed to copy keywords:', err);
+      alert('Failed to copy keywords to clipboard');
+    });
+  }, []);
+
   // Upload function
   const handleUpload = useCallback(async () => {
     if (!files.length || !user || uploading) return;
@@ -439,6 +454,153 @@ export const Tracker = () => {
     window.open(getFileUrl('download', filename), '_blank');
   }, [getFileUrl]);
 
+  // Keywords rendering helper - Enhanced version without text display
+  const renderKeywords = (keywords) => {
+    if (!keywords || !keywords.success) return null;
+
+    const { keywords_by_category, top_keywords } = keywords;
+
+    return (
+      <div style={{ marginTop: '1rem' }}>
+        {/* Header with main action */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', padding: '1rem', background: 'rgba(245,158,11,0.1)', borderRadius: '8px', border: '1px solid rgba(245,158,11,0.3)' }}>
+          <div>
+            <h4 style={{ color: loggedInYellow, margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.2rem' }}>
+              <Tag size={22} />
+              Extracted Keywords
+            </h4>
+            <p style={{ color: '#D1D5DB', margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
+              {keywords.total_keywords_found} keywords found • {keywords.unique_keywords} unique • {keywords.categories_found.length} categories
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <button
+              onClick={() => copyKeywordsToClipboard(top_keywords)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.5rem 1rem',
+                background: keywordsCopied ? 'rgba(34,197,94,0.2)' : 'rgba(245,158,11,0.8)',
+                border: `1px solid ${keywordsCopied ? 'rgba(34,197,94,0.4)' : 'rgba(245,158,11,0.6)'}`,
+                borderRadius: '6px',
+                color: keywordsCopied ? '#22C55E' : '#111827',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: 600
+              }}
+            >
+              {keywordsCopied ? <CheckCircle size={16} /> : <Copy size={16} />}
+              {keywordsCopied ? 'Copied!' : 'Copy All Keywords'}
+            </button>
+            <button
+              onClick={() => setShowKeywords(!showKeywords)}
+              style={{
+                padding: '0.5rem 1rem',
+                background: 'rgba(245,158,11,0.2)',
+                border: '1px solid rgba(245,158,11,0.4)',
+                borderRadius: '6px',
+                color: loggedInYellow,
+                cursor: 'pointer',
+                fontSize: '0.9rem'
+              }}
+            >
+              {showKeywords ? 'Hide Categories' : 'Show Categories'}
+            </button>
+          </div>
+        </div>
+
+        {/* Top Keywords - Always Visible */}
+        <div style={{ marginBottom: '1.5rem' }}>
+          <div style={{ marginBottom: '1rem' }}>
+            <h5 style={{ color: '#E5E7EB', fontSize: '1rem', marginBottom: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <TrendingUp size={18} />
+              Top Keywords ({top_keywords.length})
+            </h5>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem' }}>
+              {top_keywords.map((item, index) => (
+                <div
+                  key={index}
+                  style={{
+                    padding: '0.75rem 1rem',
+                    background: 'rgba(245,158,11,0.15)',
+                    border: '1px solid rgba(245,158,11,0.3)',
+                    borderRadius: '8px',
+                    color: '#E5E7EB',
+                    fontSize: '0.9rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.25rem'
+                  }}
+                >
+                  <div style={{ fontWeight: 600, color: loggedInYellow }}>{item.keyword}</div>
+                  <div style={{ fontSize: '0.75rem', color: '#9CA3AF', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>{item.category.replace('_', ' ')}</span>
+                    <span>{Math.round(item.confidence * 100)}% confidence</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Detailed Categories - Expandable */}
+        {showKeywords && (
+          <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
+            <h5 style={{ color: '#22C55E', fontSize: '1rem', marginBottom: '1rem', fontWeight: 600 }}>
+              Keywords by Category
+            </h5>
+            {Object.entries(keywords_by_category).map(([category, items]) => (
+              <div key={category} style={{ marginBottom: '1.5rem' }}>
+                <h6 style={{ 
+                  color: '#22C55E', 
+                  fontSize: '0.95rem', 
+                  marginBottom: '0.75rem', 
+                  textTransform: 'capitalize',
+                  fontWeight: 500,
+                  padding: '0.5rem',
+                  background: 'rgba(34,197,94,0.1)',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(34,197,94,0.2)'
+                }}>
+                  {category.replace('_', ' ')} ({items.length} found)
+                </h6>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', paddingLeft: '0.5rem' }}>
+                  {items.map((item, index) => (
+                    <span
+                      key={index}
+                      style={{
+                        padding: '0.4rem 0.8rem',
+                        background: 'rgba(34,197,94,0.2)',
+                        border: '1px solid rgba(34,197,94,0.3)',
+                        borderRadius: '6px',
+                        color: '#E5E7EB',
+                        fontSize: '0.85rem',
+                        fontWeight: 500,
+                        cursor: 'pointer'
+                      }}
+                      title={`Confidence: ${(item.confidence * 100).toFixed(1)}% | Found in context: "${item.context.substring(0, 100)}..."`}
+                    >
+                      {item.keyword}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Summary Stats */}
+        <div style={{ marginTop: '1rem', padding: '0.75rem', background: 'rgba(34,197,94,0.1)', borderRadius: '6px', border: '1px solid rgba(34,197,94,0.2)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem', color: '#9CA3AF' }}>
+            <span>Analysis complete</span>
+            <span>{keywords.categories_found.join(', ')} detected</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', background: '#111827', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
@@ -475,7 +637,7 @@ export const Tracker = () => {
       </motion.h1>
       
       <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3, duration: 0.7 }} style={{ color: '#9CA3AF', marginBottom: '1rem', textAlign: 'center', fontSize: '1.1rem', maxWidth: '600px' }}>
-        Upload and manage your documents with intelligent text extraction capabilities.
+        Upload and manage your documents with intelligent text extraction and keyword analysis capabilities.
       </motion.p>
       
       {user && (
@@ -490,7 +652,7 @@ export const Tracker = () => {
       {!docServiceAvailable && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', padding: '1rem', marginBottom: '2rem', maxWidth: '800px', width: '100%' }}>
           <p style={{ color: '#EF4444', textAlign: 'center', fontSize: '0.9rem' }}>
-            🔵 Document processing service unavailable. To enable text extraction, start the Python service on port 5001.
+            🔵 Document processing service unavailable. To enable text extraction and keyword analysis, start the Python service on port 5001.
           </p>
         </motion.div>
       )}
@@ -623,7 +785,7 @@ export const Tracker = () => {
                         setDocModalOpen(true);
                       }} 
                       style={{ padding: '0.5rem', background: 'rgba(34,197,94,0.2)', border: '1px solid rgba(34,197,94,0.4)', borderRadius: '6px', color: '#22C55E', cursor: 'pointer' }}
-                      title="Extract text from document"
+                      title="Extract keywords and skills from document"
                     >
                       <Scan size={16} />
                     </button>
@@ -666,20 +828,21 @@ export const Tracker = () => {
               background: '#1F2937',
               borderRadius: '1rem',
               padding: '2rem',
-              maxWidth: '600px',
+              maxWidth: '800px',
               width: '100%',
-              maxHeight: '80vh',
+              maxHeight: '90vh',
               overflowY: 'auto'
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h3 style={{ color: loggedInYellow, margin: 0 }}>Document Text Extraction</h3>
+              <h3 style={{ color: loggedInYellow, margin: 0 }}>Keyword Extraction & Analysis</h3>
               <button
                 onClick={() => {
                   setDocModalOpen(false);
                   setDocFile(null);
                   setDocResult(null);
                   setSelectedFileForDoc(null);
+                  setShowKeywords(false);
                 }}
                 style={{
                   background: 'none',
@@ -738,7 +901,7 @@ export const Tracker = () => {
                       marginBottom: '1rem'
                     }}
                   >
-                    {docLoading ? 'Processing...' : 'Extract Text'}
+                    {docLoading ? 'Processing...' : 'Extract Text & Keywords'}
                   </button>
                 )}
               </div>
@@ -747,7 +910,7 @@ export const Tracker = () => {
             {docLoading && (
               <div style={{ textAlign: 'center', padding: '2rem' }}>
                 <div style={{ color: loggedInYellow, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Processing document...</div>
-                <div style={{ color: '#9CA3AF', fontSize: '0.9rem' }}>This may take a few moments</div>
+                <div style={{ color: '#9CA3AF', fontSize: '0.9rem' }}>Extracting text and analyzing keywords...</div>
               </div>
             )}
 
@@ -763,53 +926,28 @@ export const Tracker = () => {
 
                 {docResult.success ? (
                   <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                      <h4 style={{ color: '#22C55E', margin: 0 }}>Extracted Text</h4>
-                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        {docResult.extraction_type && (
-                          <span style={{ color: '#9CA3AF', fontSize: '0.8rem' }}>
-                            Method: {docResult.extraction_type.toUpperCase()}
-                          </span>
-                        )}
-                        <button
-                          onClick={() => copyToClipboard(docResult.text)}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.25rem',
-                            padding: '0.25rem 0.5rem',
-                            background: textCopied ? 'rgba(34,197,94,0.2)' : 'rgba(245,158,11,0.2)',
-                            border: `1px solid ${textCopied ? 'rgba(34,197,94,0.4)' : 'rgba(245,158,11,0.4)'}`,
-                            borderRadius: '4px',
-                            color: textCopied ? '#22C55E' : loggedInYellow,
-                            cursor: 'pointer',
-                            fontSize: '0.8rem'
-                          }}
-                        >
-                          {textCopied ? <CheckCircle size={14} /> : <Copy size={14} />}
-                          {textCopied ? 'Copied!' : 'Copy'}
-                        </button>
+                    {/* Document Info */}
+                    <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'rgba(34,197,94,0.1)', borderRadius: '6px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h4 style={{ color: '#22C55E', margin: 0 }}>Document Analysis Complete</h4>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          {docResult.extraction_type && (
+                            <span style={{ color: '#9CA3AF', fontSize: '0.8rem' }}>
+                              Method: {docResult.extraction_type.toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ marginTop: '0.5rem', color: '#9CA3AF', fontSize: '0.8rem' }}>
+                        {docResult.word_count && `Words: ${docResult.word_count} | `}
+                        {docResult.char_count && `Characters: ${docResult.char_count} | `}
+                        {docResult.page_count && `Pages: ${docResult.page_count} | `}
+                        {docResult.extraction_method && `Method: ${docResult.extraction_method}`}
                       </div>
                     </div>
-                    <div style={{
-                      background: '#374151',
-                      padding: '1rem',
-                      borderRadius: '6px',
-                      maxHeight: '300px',
-                      overflowY: 'auto',
-                      whiteSpace: 'pre-wrap',
-                      fontFamily: 'monospace',
-                      fontSize: '0.9rem',
-                      color: '#E5E7EB'
-                    }}>
-                      {docResult.text || 'No text found in document'}
-                    </div>
-                    <div style={{ marginTop: '0.5rem', color: '#9CA3AF', fontSize: '0.8rem' }}>
-                      {docResult.word_count && `Words: ${docResult.word_count} | `}
-                      {docResult.char_count && `Characters: ${docResult.char_count} | `}
-                      {docResult.page_count && `Pages: ${docResult.page_count} | `}
-                      {docResult.extraction_method && `Method: ${docResult.extraction_method}`}
-                    </div>
+
+                    {/* Keywords Section - Now the main focus */}
+                    {renderKeywords(docResult.keywords)}
                   </div>
                 ) : (
                   <div style={{ padding: '1rem', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px' }}>
