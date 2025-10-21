@@ -22,12 +22,17 @@ export function Navbar() {
     }
   });
 
-  // Navigation items configuration - Tracker only shows when authenticated
+  // Check if user is admin
+  const isAdmin = state.user?.role === 'admin' || 
+                  state.user?.isAdmin === true || 
+                  state.user?.email === 'admin@skillora.org';
+
+  // Navigation items configuration - Tracker only shows when authenticated AND not admin
   const navItems = [
     { path: '/', label: 'Home', isActive: () => state.isAuthenticated ? currentPath === '/welcome' : currentPath === '/' },
     { path: '/about', label: 'About' },
-    // Conditionally add Tracker link only when authenticated
-    ...(state.isAuthenticated ? [{ path: '/tracker', label: 'Tracker' }] : []),
+    // Conditionally add Tracker link only when authenticated AND not admin
+    ...(state.isAuthenticated && !isAdmin ? [{ path: '/tracker', label: 'Tracker' }] : []),
     { path: '/services', label: 'Services' },
     { path: '/contact', label: 'Contact' }
   ];
@@ -40,7 +45,8 @@ export function Navbar() {
   const userMenuItems = [
     { path: '/profile', label: 'Profile' },
     { path: '/dashboard', label: 'Dashboard' },
-    { path: '/tracker', label: 'Tracker' },
+    // Only show Tracker in dropdown if not admin
+    ...(!isAdmin ? [{ path: '/tracker', label: 'Tracker' }] : []),
     { label: 'Logout', action: 'logout', variant: 'danger' }
   ];
 

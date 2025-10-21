@@ -8,6 +8,8 @@ const fs = require('fs');
 const axios = require('axios');
 const FormData = require('form-data');
 const authRoutes = require('./routes/auth');
+const overviewRoutes = require("./routes/overview");
+const achievementRoutes = require("./routes/achievement");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -39,16 +41,16 @@ let User, Student, Contact;
 try {
   const userModels = require('./models/User');
   User = userModels.User || userModels;
-  console.log('✅ User model imported successfully');
+  console.log('User model imported successfully');
 } catch (error) {
-  console.error('❌ Error importing User model:', error.message);
+  console.error('Error importing User model:', error.message);
 }
 
 try {
   Student = require('./models/Student');
-  console.log('✅ Student model imported successfully');
+  console.log('Student model imported successfully');
 } catch (error) {
-  console.error('❌ Error importing Student model:', error.message);
+  console.error('Error importing Student model:', error.message);
   
   const studentSchema = new mongoose.Schema({
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
@@ -68,7 +70,7 @@ try {
   }, { timestamps: true });
 
   Student = mongoose.model('Student', studentSchema);
-  console.log('✅ Student model created inline');
+  console.log('Student model created inline');
 }
 
 const contactSchema = new mongoose.Schema({
@@ -94,13 +96,17 @@ const findUserFolder = (email) => {
   return fs.existsSync(oldPath) ? oldPath : null;
 };
 
-// Document Service Helper
 const isDocServiceAvailable = async () => {
   try {
-    const response = await axios.get(`${DOC_SERVICE_URL}/health`, { timeout: 5000 });
-    return response.status === 200;
+    const response = await axios.get(`${DOC_SERVICE_URL}/health`, { 
+      timeout: 5000,
+      headers: {
+        'User-Agent': 'Skillora-Server/1.0'
+      }
+    });
+    return response.status === 200 && response.data.status === 'healthy';
   } catch (error) {
-    console.warn('Document service not available:', error.message);
+    console.warn('Document service health check failed:', error.message);
     return false;
   }
 };
@@ -151,7 +157,6 @@ const tempUpload = multer({ storage: tempStorage, fileFilter, limits: { fileSize
 
 // ---------- DOCUMENT PROCESSING ROUTES ----------
 
-// Extract text from uploaded file with keyword extraction
 app.post('/api/document/extract', tempUpload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -167,22 +172,47 @@ app.post('/api/document/extract', tempUpload.single('file'), async (req, res) =>
       });
     }
 
-    const formData = new FormData();
-    formData.append('file', fs.createReadStream(req.file.path));
-    formData.append('extract_keywords', 'true'); // Enable keyword extraction
+    try {
+      const formData = new FormData();
+      formData.append('file', fs.createReadStream(req.file.path));
+      formData.append('extract_keywords', 'true');
+      formData.append('categorize_skills', 'true'); 
 
-    const response = await axios.post(`${DOC_SERVICE_URL}/document/analyze`, formData, {
-      headers: formData.getHeaders(),
-      timeout: 60000 // Increased timeout for keyword processing
-    });
+      console.log('Sending request to local Python service...');
+      
+      const response = await axios.post(`${DOC_SERVICE_URL}/analyze_and_recommend`, formData, {
+        headers: {
+          ...formData.getHeaders(),
+        },
+        timeout: 120000,
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity
+      });
 
-    fs.unlinkSync(req.file.path);
+      console.log('Python service response received');
+      
+      fs.unlinkSync(req.file.path);
 
-    res.json({
-      success: true,
-      ...response.data,
-      filename: req.file.originalname
-    });
+      res.json({
+        success: true,
+        filename: req.file.originalname,
+        ...response.data
+      });
+
+    } catch (axiosError) {
+      console.error('Python service error:', axiosError.response?.data || axiosError.message);
+      
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+
+      res.status(500).json({
+        success: false,
+        message: 'Document analysis failed',
+        error: axiosError.response?.data?.error || axiosError.message,
+        details: axiosError.response?.data || null
+      });
+    }
 
   } catch (error) {
     console.error('Document extraction error:', error);
@@ -191,16 +221,15 @@ app.post('/api/document/extract', tempUpload.single('file'), async (req, res) =>
     }
     res.status(500).json({
       success: false,
-      message: 'Failed to extract text from document',
-      error: error.response?.data?.error || error.message
+      message: 'Failed to process document',
+      error: error.message
     });
   }
 });
 
-// Extract text from existing file with keyword extraction
 app.post('/api/document/extract-from-file', async (req, res) => {
   try {
-    const { email, filename, extract_keywords = true } = req.body;
+    const { email, filename, extract_keywords = true, categorize_skills = true } = req.body;
 
     if (!email || !filename) {
       return res.status(400).json({ success: false, message: 'Email and filename required' });
@@ -220,144 +249,280 @@ app.post('/api/document/extract-from-file', async (req, res) => {
     if (!serviceAvailable) {
       return res.status(503).json({
         success: false,
-        message: 'Document processing service unavailable'
+        message: 'Document processing service unavailable. Please ensure the Python service is running on port 5001.'
       });
     }
 
-    const response = await axios.post(`${DOC_SERVICE_URL}/document/analyze_from_path`, {
-      file_path: filePath,
-      extract_keywords: extract_keywords
-    }, { timeout: 60000 });
+    try {
+      console.log(`Analyzing file: ${filePath}`);
+      
+      const response = await axios.post(`${DOC_SERVICE_URL}/document/analyze_from_path`, {
+        file_path: filePath,
+        extract_keywords: extract_keywords,
+        categorize_skills: categorize_skills
+      }, { 
+        timeout: 120000,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
 
-    res.json({
-      success: true,
-      ...response.data,
-      filename
-    });
+      console.log('File analysis completed');
+
+      res.json({
+        success: true,
+        filename: filename,
+        ...response.data
+      });
+
+    } catch (axiosError) {
+      console.error('Python service error:', axiosError.response?.data || axiosError.message);
+      
+      res.status(500).json({
+        success: false,
+        message: 'Document analysis failed',
+        error: axiosError.response?.data?.error || axiosError.message,
+        details: axiosError.response?.data || null
+      });
+    }
 
   } catch (error) {
     console.error('Document extraction error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to extract text',
-      error: error.response?.data?.error || error.message
+      message: 'Failed to analyze document',
+      error: error.message
     });
   }
 });
 
-// Extract keywords from text only
-app.post('/api/keywords/extract', async (req, res) => {
+app.post('/api/skills/categorize', async (req, res) => {
   try {
-    const { text, min_confidence = 0.7 } = req.body;
+    const { skills } = req.body;
 
-    if (!text) {
-      return res.status(400).json({ success: false, message: 'Text is required' });
+    if (!skills || !Array.isArray(skills)) {
+      return res.status(400).json({ success: false, message: 'Skills array is required' });
     }
 
     const serviceAvailable = await isDocServiceAvailable();
     if (!serviceAvailable) {
       return res.status(503).json({
         success: false,
-        message: 'Keyword extraction service unavailable'
+        message: 'Skill categorization service unavailable'
       });
     }
 
-    const response = await axios.post(`${DOC_SERVICE_URL}/keywords/extract`, {
-      text: text,
-      min_confidence: min_confidence
+    const response = await axios.post(`${DOC_SERVICE_URL}/skills/categorize`, {
+      skills: skills
     }, { timeout: 30000 });
 
     res.json(response.data);
 
   } catch (error) {
-    console.error('Keyword extraction error:', error);
+    console.error('Skill categorization error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to extract keywords',
+      message: 'Failed to categorize skills',
       error: error.response?.data?.error || error.message
     });
   }
 });
 
-// Get keyword categories
-app.get('/api/keywords/categories', async (req, res) => {
+app.post('/api/analyze-and-recommend', tempUpload.single('file'), async (req, res) => {
   try {
     const serviceAvailable = await isDocServiceAvailable();
     if (!serviceAvailable) {
-      return res.json({
-        success: true,
-        categories: ['programming_languages', 'frameworks_libraries', 'databases_tools', 'certifications', 'education', 'methodologies', 'companies']
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(503).json({
+        success: false,
+        message: 'Document processing service unavailable. Please ensure the Python service is running on port 5001.'
       });
     }
 
-    const response = await axios.get(`${DOC_SERVICE_URL}/keywords/categories`, { timeout: 5000 });
-    res.json(response.data);
-
-  } catch (error) {
-    res.json({
-      success: true,
-      categories: ['programming_languages', 'frameworks_libraries', 'databases_tools', 'certifications', 'education', 'methodologies', 'companies']
-    });
-  }
-});
-
-// Get supported formats
-app.get('/api/document/formats', async (req, res) => {
-  try {
-    const serviceAvailable = await isDocServiceAvailable();
-    if (!serviceAvailable) {
-      return res.json({
-        success: true,
-        formats: {
-          images: ['.jpg', '.jpeg', '.png'],
-          documents: ['.pdf', '.doc', '.docx'],
-          all: ['.jpg', '.jpeg', '.png', '.pdf', '.doc', '.docx']
-        }
-      });
-    }
-
-    const response = await axios.get(`${DOC_SERVICE_URL}/document/supported_formats`, { timeout: 5000 });
-    res.json(response.data);
-
-  } catch (error) {
-    res.json({
-      success: true,
-      formats: {
-        images: ['.jpg', '.jpeg', '.png'],
-        documents: ['.pdf', '.doc', '.docx'],
-        all: ['.jpg', '.jpeg', '.png', '.pdf', '.doc', '.docx']
+    try {
+      let response;
+      
+      if (req.file) {
+        const formData = new FormData();
+        formData.append('file', fs.createReadStream(req.file.path));
+        
+        response = await axios.post(`${DOC_SERVICE_URL}/analyze_and_recommend`, formData, {
+          headers: {
+            ...formData.getHeaders(),
+          },
+          timeout: 120000,
+          maxBodyLength: Infinity,
+          maxContentLength: Infinity
+        });
+        
+        fs.unlinkSync(req.file.path);
+      } else {
+        const requestData = req.body;
+        
+        response = await axios.post(`${DOC_SERVICE_URL}/analyze_and_recommend`, requestData, {
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          timeout: 120000
+        });
       }
+
+      res.json({
+        success: true,
+        ...response.data
+      });
+
+    } catch (axiosError) {
+      console.error('Python service error:', axiosError.response?.data || axiosError.message);
+      
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+
+      res.status(500).json({
+        success: false,
+        message: 'Analysis and recommendation failed',
+        error: axiosError.response?.data?.error || axiosError.message,
+        details: axiosError.response?.data || null
+      });
+    }
+
+  } catch (error) {
+    console.error('Combined analysis error:', error);
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    res.status(500).json({
+      success: false,
+      message: 'Failed to perform analysis and recommendation',
+      error: error.message
     });
   }
 });
 
-// Check service status
+app.get('/api/sectors', async (req, res) => {
+  try {
+    const serviceAvailable = await isDocServiceAvailable();
+    if (!serviceAvailable) {
+      // Return hardcoded sectors if service is unavailable
+      return res.json({
+        success: true,
+        sectors: [
+          "Technology",
+          "Life Sciences", 
+          "Physical Sciences",
+          "Business & Management",
+          "Education & Training",
+          "Creative & Design",
+          "Industrial & Manufacturing",
+          "Social Sciences",
+          "Other"
+        ],
+        total_sectors: 9
+      });
+    }
+
+    const response = await axios.get(`${DOC_SERVICE_URL}/sectors`, { timeout: 10000 });
+    res.json(response.data);
+
+  } catch (error) {
+    console.error('Error fetching sectors:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch sectors',
+      error: error.response?.data?.error || error.message
+    });
+  }
+});
+
+app.get('/api/sectors/:sector/skills', async (req, res) => {
+  try {
+    const { sector } = req.params;
+    
+    const serviceAvailable = await isDocServiceAvailable();
+    if (!serviceAvailable) {
+      // Return hardcoded sector skills if service is unavailable
+      const sectorSkills = {
+        "Technology": [
+          "Python", "JavaScript", "Java", "React", "Node.js", "SQL", "AWS", 
+          "Machine Learning", "Data Science", "Software Development"
+        ],
+        "Life Sciences": [
+          "Biology", "Medical Research", "Clinical Trials", "Biotechnology", 
+          "Pharmaceuticals", "Laboratory Skills", "Genetics", "Biochemistry"
+        ],
+        "Physical Sciences": [
+          "Physics", "Chemistry", "Mathematics", "Statistics", "Research", 
+          "Laboratory Analysis", "Materials Science", "Data Analysis"
+        ],
+        "Business & Management": [
+          "Project Management", "Business Analysis", "Finance", "Marketing", 
+          "Leadership", "Strategic Planning", "Operations Management"
+        ]
+      };
+      
+      const skills = sectorSkills[sector] || [];
+      return res.json({
+        success: true,
+        sector: sector,
+        skills: skills,
+        skill_count: skills.length
+      });
+    }
+
+    const response = await axios.get(`${DOC_SERVICE_URL}/sectors/${encodeURIComponent(sector)}/skills`, { 
+      timeout: 10000 
+    });
+    res.json(response.data);
+
+  } catch (error) {
+    console.error('Error fetching sector skills:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch sector skills',
+      error: error.response?.data?.error || error.message
+    });
+  }
+});
+
 app.get('/api/document/status', async (req, res) => {
   try {
     const available = await isDocServiceAvailable();
+    
+    let serviceInfo = {
+      available: available,
+      service_url: DOC_SERVICE_URL,
+      processing_type: 'Local Only'
+    };
+
+    if (available) {
+      try {
+        const healthResponse = await axios.get(`${DOC_SERVICE_URL}/health`, { timeout: 5000 });
+        serviceInfo = {
+          ...serviceInfo,
+          ...healthResponse.data
+        };
+      } catch (healthError) {
+        console.warn('Could not get detailed service info:', healthError.message);
+      }
+    }
+
     res.json({
       success: true,
-      available,
-      service_url: DOC_SERVICE_URL,
-      features: {
-        text_extraction: available,
-        keyword_extraction: available,
-        ocr: available,
-        pdf_processing: available,
-        document_analysis: available
-      }
+      ...serviceInfo
     });
   } catch (error) {
     res.json({
       success: false,
       available: false,
       service_url: DOC_SERVICE_URL,
+      processing_type: 'Local Only',
       error: error.message
     });
   }
 });
 
-// ---------- STUDENT ROUTES (Simplified) ----------
+// ---------- STUDENT ROUTES ----------
 
 app.get('/api/student/:userId', async (req, res) => {
   try {
@@ -514,7 +679,7 @@ app.get('/api/download/:email/:filename', serveFile('attachment'));
 app.use('/uploads', express.static(uploadsDir));
 
 app.get('/', (_, res) => res.json({
-  message: 'Skillora Server with Enhanced Document Processing is running!',
+  message: 'Skillora Server with Local Document Processing & Sector-Based Classification is running!',
   status: 'healthy',
   timestamp: new Date().toISOString(),
   database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected',
@@ -525,11 +690,29 @@ app.get('/', (_, res) => res.json({
     studentProfiles: true, 
     documentProcessing: true,
     keywordExtraction: true,
-    textAnalysis: true
-  }
+    sectorBasedClassification: true,
+    skillCategorization: true,
+    jobRecommendations: false,
+    localProcessingOnly: true
+  },
+  documentServiceUrl: DOC_SERVICE_URL,
+  supportedSectors: [
+    "Technology",
+    "Life Sciences", 
+    "Physical Sciences",
+    "Business & Management",
+    "Education & Training",
+    "Creative & Design",
+    "Industrial & Manufacturing",
+    "Social Sciences",
+    "Other"
+  ],
+  processingType: "Local Only - No External APIs - No Job Recommendations"
 }));
 
 app.use('/api/auth', authRoutes);
+app.use("/api/overview", overviewRoutes);
+app.use("/api/achievements", achievementRoutes);
 
 // ---------- ERROR HANDLING ----------
 app.use((err, req, res, next) => {
@@ -557,9 +740,9 @@ app.use('*', (req, res) => res.status(404).json({
 const connectDB = async () => {
   try {
     await mongoose.connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true });
-    console.log("✅ MongoDB Connected");
+    console.log("MongoDB Connected");
   } catch (err) {
-    console.error("❌ MongoDB Error:", err.message);
+    console.error("MongoDB Error:", err.message);
     process.exit(1);
   }
 };
@@ -568,23 +751,34 @@ const startServer = async () => {
   try {
     await connectDB();
     const docAvailable = await isDocServiceAvailable();
-    console.log(`📄 Document Service: ${docAvailable ? 'Available' : 'Not Available'}`);
-    console.log(`🔍 Keyword Extraction: ${docAvailable ? 'Available' : 'Not Available'}`);
+    console.log(`Document Service: ${docAvailable ? 'Available' : 'Not Available'}`);
+    console.log(`Processing Type: Local Only - No External APIs - No Job Recommendations`);
+    console.log(`Keyword Extraction: ${docAvailable ? 'Available' : 'Not Available'}`);
+    console.log(`Sector Classification: ${docAvailable ? 'Available' : 'Not Available'}`);
+    console.log(`Job Recommendations: Disabled/Removed`);
     
     app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`🌐 API: http://localhost:${PORT}/api`);
-      console.log(`📄 Document Service: ${DOC_SERVICE_URL}`);
-      console.log(`💡 Features: Document Processing, Text Extraction, Keyword Analysis`);
+      console.log(`Server running on port ${PORT}`);
+      console.log(`API: http://localhost:${PORT}/api`);
+      console.log(`Document Service: ${DOC_SERVICE_URL} (Local Processing Only - No Job Recommendations)`);
+      console.log(`Features: Document Processing, Sector-Based Classification, Skill Categorization`);
+      console.log(`Available API Endpoints:`);
+      console.log(`   /api/document/extract - Upload & analyze documents`);
+      console.log(`   /api/document/extract-from-file - Analyze existing files`);
+      console.log(`   /api/analyze-and-recommend - Combined analysis & skill categorization`);
+      console.log(`   /api/skills/categorize - Categorize skills by sector (Local)`);
+      console.log(`   /api/sectors - Get available sectors`);
+      console.log(`   /api/sectors/:sector/skills - Get skills by sector`);
+      console.log(`   NOTE: Career goals endpoints removed`);
     });
   } catch (error) {
-    console.error('❌ Server start failed:', error);
+    console.error('Server start failed:', error);
     process.exit(1);
   }
 };
 
 process.on('SIGINT', async () => {
-  console.log('🔥 Shutting down...');
+  console.log('Shutting down...');
   await mongoose.connection.close();
   process.exit(0);
 });

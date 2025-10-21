@@ -46,12 +46,12 @@ export function Welcome() {
     
     buttons: isAdmin 
       ? [
-          { icon: Shield, text: "Admin Panel", bg: "#DC2626", hover: "#B91C1C", onClick: () => console.log('Navigate to Admin Panel') },
+          { icon: Shield, text: "Admin Panel", bg: "#DC2626", hover: "#B91C1C", onClick: () => navigate('/dashboard') },
           { icon: BarChart3, text: "View Reports", bg: "transparent", hover: "rgba(107, 114, 128, 0.1)", border: true, onClick: () => console.log('Navigate to Reports') }
         ]
       : [
-          { text: "Get Started", bg: "#2563EB", hover: "#1D4ED8", onClick: () => navigate('/tracker') }, // Changed to navigate to /tracker
-          { text: "Dashboard", bg: "transparent", hover: "rgba(107, 114, 128, 0.1)", border: true, onClick: () => navigate('/dashboard') }
+          { text: "Dashboard", bg: "#2563EB", hover: "#1D4ED8", onClick: () => navigate('/dashboard') },
+          { text: "Tracker", bg: "transparent", hover: "rgba(107, 114, 128, 0.1)", border: true, onClick: () => navigate('/tracker') }
         ]
   };
 

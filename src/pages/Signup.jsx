@@ -74,8 +74,7 @@ export function Signup() {
         break;
       case 'lastName':
         if (!value.trim()) newErrors.lastName = 'Last name is required';
-        else if (value.trim().length < 2) newErrors.lastName = 'Last name must be at least 2 characters';
-        else delete newErrors.lastName;
+               else delete newErrors.lastName;
         break;
       case 'email':
         if (!value.trim()) newErrors.email = 'Email is required';

@@ -164,6 +164,7 @@ const sendOTPEmail = async (email, otp, firstName = '') => {
   return await transporter.sendMail(mailOptions);
 };
 
+
 // --- Routes ---
 
 // Test route
