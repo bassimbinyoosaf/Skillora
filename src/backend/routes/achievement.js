@@ -3,6 +3,7 @@ const express = require("express");
 const router = express.Router();
 const Overview = require("../models/Overview");
 const Achievement = require("../models/Achievement");
+
 /**
  * ✅ Route: POST /api/achievements/complete-skill
  * Marks a skill as completed:
@@ -11,13 +12,13 @@ const Achievement = require("../models/Achievement");
  */
 router.post("/complete-skill", async (req, res) => {
   try {
-    const { email, skill } = req.body;
+    const { userEmail, skill } = req.body;
 
-    if (!email || !skill) {
-      return res.status(400).json({ success: false, message: "Missing email or skill" });
+    if (!userEmail || !skill) {
+      return res.status(400).json({ success: false, message: "Missing userEmail or skill" });
     }
 
-    const overview = await Overview.findOne({ userEmail: email });
+    const overview = await Overview.findOne({ userEmail });
     if (!overview) {
       return res.status(404).json({ success: false, message: "Overview not found for this user" });
     }
@@ -44,7 +45,7 @@ router.post("/complete-skill", async (req, res) => {
 
     // ✅ Upsert into Achievement collection
     await Achievement.updateOne(
-      { email },
+      { userEmail },
       { $push: { achievements: { $each: achievementEntries } } },
       { upsert: true }
     );
@@ -73,7 +74,7 @@ router.post("/complete-skill", async (req, res) => {
 router.get("/:email", async (req, res) => {
   try {
     const { email } = req.params;
-    const achievementDoc = await Achievement.findOne({ email });
+    const achievementDoc = await Achievement.findOne({ userEmail: email });
 
     if (!achievementDoc) {
       return res.json({ success: true, achievements: [] });
@@ -100,7 +101,7 @@ router.delete("/:email/:title", async (req, res) => {
     const { email, title } = req.params;
 
     const achievementDoc = await Achievement.findOneAndUpdate(
-      { email },
+      { userEmail: email },
       { $pull: { achievements: { title } } },
       { new: true }
     );

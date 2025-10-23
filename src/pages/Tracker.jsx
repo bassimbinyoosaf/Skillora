@@ -84,7 +84,6 @@ useEffect(() => {
 
 
 // Save selected careers to backend (Overview + Goals)
-// Save selected careers to backend (Overview + Goals)
 const saveCareerSelection = useCallback(async () => {
   if (!user?.email || tempSelectedCareers.length === 0) {
     alert("⚠️ No careers selected to save.");
@@ -95,12 +94,12 @@ const saveCareerSelection = useCallback(async () => {
     console.log("➡️ Saving careers for:", user.email);
     console.log("➡️ Careers to save:", tempSelectedCareers);
 
-    // 1️⃣ Save to Overview
+    // Save to Overview only
     const overviewRes = await fetch("http://localhost:5000/api/overview/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        email: user.email,
+        userEmail: user.email,
         careers: tempSelectedCareers
       })
     });
@@ -110,49 +109,25 @@ const saveCareerSelection = useCallback(async () => {
     }
 
     const overviewData = await overviewRes.json();
-
-    // 2️⃣ Save to Goals
-    const goalsRes = await fetch("http://localhost:5000/api/goals/save", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: user.email,
-        goals: tempSelectedCareers.map(c => ({
-          careerTitle: c.title,
-          description: c.description,
-          relevance_score: c.relevance_score,
-          required_skills: c.required_skills || [],
-          sector: c.sector
-        }))
-      })
-    });
-
-    if (!goalsRes.ok) {
-      throw new Error(`Goals save failed: ${goalsRes.status}`);
-    }
-
-    const goalsData = await goalsRes.json();
-
     console.log("✅ Overview response:", overviewData);
-    console.log("✅ Goals response:", goalsData);
 
-    if (overviewData.success && goalsData.success) {
+    if (overviewData.success) {
       setSelectedCareers(overviewData.overview.careers);
       setTempSelectedCareers([]);
-      alert(
-        `✅ ${tempSelectedCareers.length} career${
-          tempSelectedCareers.length > 1 ? "s" : ""
-        } added to your goals!`
-      );
+      alert(`✅ Careers added successfully!`);
+      
+      // ✅ Redirect user to dashboard overview
+      navigate("/dashboard");
     } else {
-      console.error("Server returned unexpected data:", { overviewData, goalsData });
+      console.error("Server returned unexpected data:", overviewData);
       alert("❌ Failed to save careers. Check backend logs.");
     }
   } catch (error) {
     console.error("🔥 Error in saveCareerSelection:", error);
     alert(`❌ Error saving to database: ${error.message}`);
   }
-}, [user, tempSelectedCareers]);
+}, [user, tempSelectedCareers, navigate]);
+
 
 
 
