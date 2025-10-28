@@ -1193,6 +1193,7 @@ def not_found(e):
 
 # Startup logic
 if __name__ == '__main__':
+    import os
     missing_deps = []
     try:
         import pytesseract
@@ -1248,6 +1249,12 @@ if __name__ == '__main__':
     logger.info(f"Google Gemini API: {'✓ Configured' if gemini_configured else '✗ Not Configured (will use fallback)'}")
     if gemini_configured:
         logger.info(f"Gemini API Key: {gemini_api_key[:10]}...{gemini_api_key[-4:] if len(gemini_api_key) > 14 else 'short'}")
+
+    # ✅ Start Flask using Render's port
+    import os
+    port = int(os.environ.get("PORT", 8000))
+    logger.info(f"Starting Flask server on 0.0.0.0:{port}")
+    app.run(host="0.0.0.0", port=port)
 
     logger.info("")
     logger.info("🚀 Starting Enhanced Document Analysis Service with Google Gemini Integration on port 5001...")
