@@ -1,25 +1,14 @@
 Flask==2.3.3
 Flask-CORS==4.0.0
-
-# PDF and document handling
-PyMuPDF==1.23.7
-PyPDF2==3.0.1
-pdfplumber==0.10.3
-docx2txt==0.8
-python-docx==1.1.2
-mammoth==1.7.1
-
-# Image processing and OCR
+numpy==1.26.4
 opencv-python==4.8.1.78
 Pillow==10.4.0
-pytesseract==0.3.10
-
-# AI / Google Gemini API
-google-generativeai==0.5.3
-google-ai-generativelanguage==0.6.3
-
-# Utilities
+pdfplumber==0.10.3
 python-dotenv==1.0.1
-requests==2.32.3
-numpy==1.26.4
-
+docx2txt==0.8
+mammoth==1.7.1
+pytesseract==0.3.10
+google-generativeai==0.5.3
+python-docx==1.1.2
+PyPDF2==3.0.1
+PyMuPDF==1.23.7
