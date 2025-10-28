@@ -1,35 +1,11 @@
-# Core Flask dependencies
 Flask==2.3.3
 Flask-CORS==4.0.0
-
-# Image processing and OCR
 opencv-python==4.8.1.78
-Pillow==11.2.1
-pytesseract==0.3.10
-
-# PDF processing
-PyPDF2==3.0.1
-pdfplumber==0.10.3
+Pillow==10.3.0
 PyMuPDF==1.23.8
-
-# Document processing
+pdfplumber==0.10.3
+python-dotenv==1.0.1
 docx2txt==0.8
-python-docx==0.8.11
-mammoth==1.6.0
-
-# Utilities
-Werkzeug==2.3.7
-numpy>=1.25.0
-
-# Optional: Enhanced text processing (not currently used, but safe to keep)
-nltk==3.8.1
-spacy==3.7.2
-
-# Development
-python-dotenv==1.0.0
-
-# HTTP requests
-aiohttp==3.12.15
-
-# Google Gemini API
-google-generativeai==0.3.2
+mammoth==1.7.1
+pytesseract==0.3.10
+google-generativeai==0.5.3
