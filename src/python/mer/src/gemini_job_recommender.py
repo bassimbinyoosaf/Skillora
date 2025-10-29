@@ -46,7 +46,12 @@ class GeminiJobRecommender:
             # Configure Gemini
             genai.configure(api_key=self.api_key)
             # Test with different model names
-            model_names = ['gemini-1.5-pro', 'gemini-pro', 'gemini-1.5-flash']
+            model_names = [
+                "models/gemini-1.5-flash-latest",
+                "models/gemini-1.5-flash",
+                "models/gemini-1.5-pro-latest"
+            ]
+
             for model_name in model_names:
                 try:
                     self.model = genai.GenerativeModel(model_name)
