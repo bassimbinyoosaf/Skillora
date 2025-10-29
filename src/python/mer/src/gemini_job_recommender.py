@@ -42,34 +42,26 @@ class GeminiJobRecommender:
             logger.warning("Gemini API key not found. Will use comprehensive fallback recommendations.")
             return
 
-        try:
-            # Configure Gemini
-            genai.configure(api_key=self.api_key)
-            # Test with different model names
-            model_names = [
-                "models/gemini-1.5-flash-latest",
-                "models/gemini-1.5-flash",
-                "models/gemini-1.5-pro-latest"
-            ]
+try:
+    # Configure Gemini API
+    genai.configure(api_key=self.api_key)
 
-            for model_name in model_names:
-                try:
-                    self.model = genai.GenerativeModel(model_name)
-                    # Test the model with a simple call
-                    test_response = self.model.generate_content("Hello")
-                    if test_response and test_response.text:
-                        self.gemini_available = True
-                        logger.info(f"Successfully initialized {model_name}")
-                        break
-                except Exception as e:
-                    logger.warning(f"Failed to initialize {model_name}: {e}")
-                    continue
+    # ✅ Correct free-tier model
+    self.model = genai.GenerativeModel("gemini-1.5-flash")
 
-            if not self.gemini_available:
-                logger.error("No compatible Gemini model found or API key invalid")
-        except Exception as e:
-            logger.error(f"Failed to initialize Gemini: {e}")
-            self.gemini_available = False
+    # ✅ Test response
+    test_response = self.model.generate_content("Hello!")
+
+    if test_response and hasattr(test_response, "text"):
+        self.gemini_available = True
+        logger.info("✅ Gemini model initialized successfully: gemini-1.5-flash")
+    else:
+        raise Exception("Empty response received from model")
+
+except Exception as e:
+    logger.error(f"❌ Gemini initialization failed: {e}")
+    self.gemini_available = False
+
 
     def _initialize_skill_mappings(self):
         """Initialize comprehensive skill-to-job mappings - ALWAYS CALLED"""
